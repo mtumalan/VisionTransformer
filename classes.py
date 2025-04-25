@@ -18,6 +18,7 @@ import segmentation_models_pytorch as smp
 import lightning as L
 
 import torch.nn.functional as F
+from transformers import VitModel, ViTConfig
 
 class StructuralDamageDataset(Dataset):
     def __init__(self, image_dir, mask_dir, classdict_path=None, transform=None, target_transform=None, lazy_class_mapping=True):
@@ -220,6 +221,22 @@ class StructuralDamageModel(L.LightningModule):
 class ViTSegmentationModel(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
+
+        #config = ViTConfig( #supuestos params de vit base patch16 224
+        #image_size=224,             # Tamaño de imagen esperado
+        #patch_size=16,              # Tamaño de cada patch (16x16 px)
+        #num_channels=3,             # RGB
+        #hidden_size=768,            # Dimensión del embedding por patch
+        #num_hidden_layers=12,       # Número de bloques Transformer
+        #num_attention_heads=12,     # Número de "cabezas" de atención
+        #intermediate_size=3072,     # Dimensión del feedforward interno
+        #qkv_bias=True,              # Usar sesgo en QKV lineales (como ViT original)
+        #hidden_dropout_prob=0.1,    # Dropout entre bloques
+        #attention_probs_dropout_prob=0.1,
+        #initializer_range=0.02,
+        #)
+        
+        #self.backbone = VitModel(config)
         self.backbone = timm.create_model("vit_base_patch16_224", pretrained=True, features_only=True)
         self.seg_head = nn.Sequential(
             nn.Conv2d(self.backbone.feature_info[-1]['num_chs'], 256, kernel_size=3, padding=1),

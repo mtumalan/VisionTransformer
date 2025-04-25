@@ -17,6 +17,8 @@ import segmentation_models_pytorch as smp
 
 import lightning as L
 
+import torch.nn.functional as F
+
 class StructuralDamageDataset(Dataset):
     def __init__(self, image_dir, mask_dir, classdict_path=None, transform=None, target_transform=None, lazy_class_mapping=True):
         self.image_dir = image_dir
@@ -226,9 +228,9 @@ class ViTSegmentationModel(nn.Module):
         )
 
     def forward(self, x):
-        features = self.backbone(x)[-1]  # use final feature map
+        features = self.backbone(x)[-1]
         out = self.seg_head(features)
-        return nn.functional.interpolate(out, size=x.shape[2:], mode='bilinear', align_corners=False)
+        return F.interpolate(out, size=x.shape[2:], mode='bilinear', align_corners=False)
 
 # Lightning Module
 class LightningViTModel(L.LightningModule):
@@ -239,9 +241,13 @@ class LightningViTModel(L.LightningModule):
 
     def forward(self, x):
         return self.model(x)
-
+    
+    def _resize_target(self, y, size):
+        return F.interpolate(y.unsqueeze(1).float(), size=size, mode='nearest').squeeze(1).long()
+    
     def training_step(self, batch, batch_idx):
         x, y = batch
+        y = self._resize_target(y, size=(224, 224))
         logits = self.forward(x)
         loss = self.loss_fn(logits, y)
         self.log("train_loss", loss)
@@ -249,12 +255,14 @@ class LightningViTModel(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
+        y = self._resize_target(y, size=(224, 224))
         logits = self.forward(x)
         loss = self.loss_fn(logits, y)
         self.log("valid_loss", loss)
 
     def test_step(self, batch, batch_idx):
         x, y = batch
+        y = self._resize_target(y, size=(224, 224))
         logits = self.forward(x)
         loss = self.loss_fn(logits, y)
         self.log("test_loss", loss)

@@ -18,7 +18,7 @@ import segmentation_models_pytorch as smp
 import lightning as L
 
 import torch.nn.functional as F
-from transformers import VitModel, ViTConfig
+from transformers import ViTModel, ViTConfig
 
 class StructuralDamageDataset(Dataset):
     def __init__(self, image_dir, mask_dir, classdict_path=None, transform=None, target_transform=None, lazy_class_mapping=True):
@@ -221,33 +221,45 @@ class StructuralDamageModel(L.LightningModule):
 class ViTSegmentationModel(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
+        config = ViTConfig( #supuestos params de vit base patch16 224
+        image_size=224,             # Tamaño de imagen esperado
+        patch_size=16,              # Tamaño de cada patch (16x16 px)
+        num_channels=3,             # RGB
+        hidden_size=768,            # Dimensión del embedding por patch
+        num_hidden_layers=12,       # Número de bloques Transformer
+        num_attention_heads=12,     # Número de "cabezas" de atención
+        intermediate_size=3072,     # Dimensión del feedforward interno
+        qkv_bias=True,              # Usar sesgo en QKV lineales (como ViT original)
+        hidden_dropout_prob=0.1,    # Dropout entre bloques
+        attention_probs_dropout_prob=0.1,
+        initializer_range=0.02,
+        )
 
-        #config = ViTConfig( #supuestos params de vit base patch16 224
-        #image_size=224,             # Tamaño de imagen esperado
-        #patch_size=16,              # Tamaño de cada patch (16x16 px)
-        #num_channels=3,             # RGB
-        #hidden_size=768,            # Dimensión del embedding por patch
-        #num_hidden_layers=12,       # Número de bloques Transformer
-        #num_attention_heads=12,     # Número de "cabezas" de atención
-        #intermediate_size=3072,     # Dimensión del feedforward interno
-        #qkv_bias=True,              # Usar sesgo en QKV lineales (como ViT original)
-        #hidden_dropout_prob=0.1,    # Dropout entre bloques
-        #attention_probs_dropout_prob=0.1,
-        #initializer_range=0.02,
-        #)
-        
-        #self.backbone = VitModel(config)
-        self.backbone = timm.create_model("vit_base_patch16_224", pretrained=True, features_only=True)
+        self.backbone = ViTModel(config)
+        #self.backbone = timm.create_model("vit_base_patch16_224", pretrained=True, features_only=True)
         self.seg_head = nn.Sequential(
-            nn.Conv2d(self.backbone.feature_info[-1]['num_chs'], 256, kernel_size=3, padding=1),
+            nn.Conv2d(self.backbone.config.hidden_size, 256, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(256, num_classes, kernel_size=1)
         )
 
     def forward(self, x):
-        features = self.backbone(x)[-1]
+        outputs = self.backbone(x)
+        hidden_states = outputs.last_hidden_state  # [batch, num_patches+1, hidden_size]
+
+        hidden_states = hidden_states[:, 1:, :]  # rCLS token
+
+        batch_size, num_patches, hidden_size = hidden_states.shape
+        h = w = int(num_patches ** 0.5)  # ejemplo: 14x14 para imagen 224 con patch 16
+
+        features = hidden_states.transpose(1, 2).reshape(batch_size, hidden_size, h, w)
+
         out = self.seg_head(features)
-        return F.interpolate(out, size=x.shape[2:], mode='bilinear', align_corners=False)
+
+        # Upsample back to original input size
+        out = nn.functional.interpolate(out, size=x.shape[2:], mode='bilinear', align_corners=False)
+
+        return out
 
 # Lightning Module
 class LightningViTModel(L.LightningModule):

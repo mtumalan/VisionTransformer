@@ -20,7 +20,7 @@ from sklearn.model_selection import train_test_split
 # --- Setup ---
 
 cwd = os.getcwd()
-classdict_path = cwd + '/VisionChallenge/collaboration_it_mx/collaboration_it_mx/output_images/calss_names_colors.csv'
+classdict_path = cwd + '/VisionChallenge/collaboration_it_mx/output_images/calss_names_colors.csv'
 print(classdict_path)
 
 rgb_to_class = load_classdict(classdict_path)
@@ -66,7 +66,7 @@ earlystop_callback = EarlyStopping(monitor="valid_loss", patience=3, verbose=Tru
 logger = CSVLogger(save_dir="logs/", name="vit-model")
 
 trainer = L.Trainer(
-    max_epochs=10,
+    max_epochs=100,
     logger=logger,
     callbacks=[earlystop_callback],
     accelerator="gpu",

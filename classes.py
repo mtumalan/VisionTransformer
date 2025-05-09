@@ -7,7 +7,7 @@ from PIL import Image
 
 import torch
 from torch.utils.data import DataLoader, Dataset
-import timm
+#import timm
 import torch.nn as nn
 
 import torchvision
@@ -218,19 +218,25 @@ class StructuralDamageModel(L.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=0.0001)
 
+class PAEDLoss(torch.nn.Module):
+    def forward(self, preds, targets):
+        abs_diff = torch.abs(preds - targets)
+        paed = torch.mean(abs_diff / (targets + 1e-6))  
+        return paed
+
 class ViTSegmentationModel(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
         config = ViTConfig( #supuestos params de vit base patch16 224
         image_size=224,             # Tamaño de imagen esperado
-        patch_size=16,              # Tamaño de cada patch (16x16 px)
+        patch_size=8,              # Tamaño de cada patch (16x16 px) -
         num_channels=3,             # RGB
-        hidden_size=768,            # Dimensión del embedding por patch
-        num_hidden_layers=12,       # Número de bloques Transformer
-        num_attention_heads=12,     # Número de "cabezas" de atención
+        hidden_size=768,            # Dimensión del embedding por patch -
+        num_hidden_layers=12,       # Número de bloques Transformer -
+        num_attention_heads=12,     # Número de "cabezas" de atención -
         intermediate_size=3072,     # Dimensión del feedforward interno
         qkv_bias=True,              # Usar sesgo en QKV lineales (como ViT original)
-        hidden_dropout_prob=0.1,    # Dropout entre bloques
+        hidden_dropout_prob=0.1,    # Dropout entre bloques --
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         )
@@ -261,25 +267,35 @@ class ViTSegmentationModel(nn.Module):
 
         return out
 
-# Lightning Module
+# Lightning Moduleclass 
 class LightningViTModel(L.LightningModule):
     def __init__(self, num_classes):
         super().__init__()
         self.model = ViTSegmentationModel(num_classes)
         self.loss_fn = nn.CrossEntropyLoss()
+        self.paed_loss = PAEDLoss()
 
     def forward(self, x):
         return self.model(x)
-    
+
     def _resize_target(self, y, size):
         return F.interpolate(y.unsqueeze(1).float(), size=size, mode='nearest').squeeze(1).long()
-    
+
     def training_step(self, batch, batch_idx):
         x, y = batch
         y = self._resize_target(y, size=(224, 224))
         logits = self.forward(x)
         loss = self.loss_fn(logits, y)
-        self.log("train_loss", loss)
+        
+        probs = torch.softmax(logits, dim=1)
+        preds = torch.argmax(probs, dim=1)  # Predicciones finales
+
+        paed = self.paed_loss(preds.float(), y.float())
+        #paed = torch.tensor(0.123) #constante test 
+        self.log("train_paed", paed, prog_bar=True, on_epoch=True, logger=True)        
+        self.log("train_loss", loss, prog_bar=True, on_epoch=True, logger=True)
+
+        
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -287,7 +303,12 @@ class LightningViTModel(L.LightningModule):
         y = self._resize_target(y, size=(224, 224))
         logits = self.forward(x)
         loss = self.loss_fn(logits, y)
-        self.log("valid_loss", loss)
+        probs = torch.softmax(logits, dim=1)
+        preds = torch.argmax(probs, dim=1)
+        paed = self.paed_loss(preds.float(), y.float())
+        #paed = torch.tensor(0.456) #constante test
+        self.log("val_paed", paed, prog_bar=True, on_epoch=True, logger=True)
+        self.log("valid_loss", loss, prog_bar=True, on_epoch=True, logger=True)
 
     def test_step(self, batch, batch_idx):
         x, y = batch
@@ -297,5 +318,4 @@ class LightningViTModel(L.LightningModule):
         self.log("test_loss", loss)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
-        return optimizer
+        return torch.optim.Adam(self.parameters(), lr=1e-4)

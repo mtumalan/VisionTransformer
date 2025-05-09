@@ -21,87 +21,93 @@ import torch.nn.functional as F
 from transformers import ViTModel, ViTConfig
 
 class StructuralDamageDataset(Dataset):
-    def __init__(self, image_dir, mask_dir, classdict_path=None, transform=None, target_transform=None, lazy_class_mapping=True):
+    def __init__(
+        self,
+        image_dir,
+        mask_dir,
+        classdict_path=None,
+        transform=None,
+        target_transform=None,
+        lazy_class_mapping=True,
+        file_list: list[str] = None,
+    ):
         self.image_dir = image_dir
-        self.mask_dir = mask_dir
-        self.classdict_path = classdict_path
-        self.images = sorted(os.listdir(image_dir))
-        self.masks = sorted(os.listdir(mask_dir))
+        self.mask_dir  = mask_dir
         self.transform = transform
         self.target_transform = target_transform
-        self.lazy_class_mapping = lazy_class_mapping  # Option to defer class mapping
+        self.lazy_class_mapping = lazy_class_mapping
 
-        if len(self.images) != len(self.masks):
-            raise ValueError("Number of images and masks must be equal!")
+        # — determine which filenames to use —
+        if file_list is not None:
+            # explicit subset
+            self.files = sorted(file_list)
+        else:
+            # only keep those present in both dirs
+            imgs  = set(os.listdir(image_dir))
+            masks = set(os.listdir(mask_dir))
+            self.files = sorted(imgs & masks)
 
+        if not self.files:
+            raise ValueError(
+                f"No matching files found in '{image_dir}' & '{mask_dir}'"
+            )
+
+        # prepare mapping (eagerly or lazily)
         if not lazy_class_mapping:
-            # Process all masks to build class mapping
             self._build_class_mapping()
         else:
-            self.unique_values = None  # Will be lazily built
+            self.unique_values = None
 
     def _build_class_mapping(self):
-        # Efficiently compute unique values across the dataset
         all_values = set()
-        for mask_file in self.masks:
-            mask_path = os.path.join(self.mask_dir, mask_file)
+        for fname in self.files:
+            mask_path = os.path.join(self.mask_dir, fname)
             mask = np.array(Image.open(mask_path).convert('L'))
             all_values.update(np.unique(mask))
 
-        self.unique_values = sorted(all_values)  # Ensure consistent ordering
+        self.unique_values = sorted(all_values)
         self.value_to_class = {v: i for i, v in enumerate(self.unique_values)}
-        self.num_classes = len(self.unique_values)
+        self.num_classes     = len(self.unique_values)
 
     def __len__(self):
-        return len(self.images)
-
-    def _lazy_class_mapping(self):
-        if self.unique_values is None:
-            self._build_class_mapping()
+        return len(self.files)
 
     def __getitem__(self, idx):
-        try:
-            # Build the class mapping lazily if needed
-            if self.lazy_class_mapping:
-                self._lazy_class_mapping()
+        # ensure mapping exists
+        if self.lazy_class_mapping and self.unique_values is None:
+            self._build_class_mapping()
 
-            # Get paths
-            img_path = os.path.join(self.image_dir, self.images[idx])
-            mask_path = os.path.join(self.mask_dir, self.masks[idx])
+        fname = self.files[idx]
+        img_path  = os.path.join(self.image_dir, fname)
+        mask_path = os.path.join(self.mask_dir,  fname)
 
-            # Load the image and mask
-            image = Image.open(img_path).convert('RGB')  # RGB image
-            mask = Image.open(mask_path).convert('L')    # Grayscale mask (class indices)
+        # load
+        image = Image.open(img_path).convert('RGB')
+        mask  = Image.open(mask_path).convert('L')
 
-            # Resize mask
-            mask = transforms.Resize((256, 256), interpolation=transforms.InterpolationMode.NEAREST)(mask)
-            mask_np = np.array(mask, dtype=np.int64)
+        # resize mask
+        mask = transforms.Resize(
+            (256, 256),
+            interpolation=transforms.InterpolationMode.NEAREST
+        )(mask)
 
-            # Remap mask values to class indices
-            mask_mapped = np.vectorize(self.value_to_class.get)(mask_np)
+        mask_np = np.array(mask, dtype=np.int64)
+        # remap raw pixel values → class indices
+        mask_mapped = np.vectorize(self.value_to_class.get)(mask_np)
+        mask_tensor = torch.tensor(mask_mapped, dtype=torch.long)
 
-            # Convert to one-hot encoding
-            mask_onehot = np.zeros((self.num_classes, mask_np.shape[0], mask_np.shape[1]), dtype=np.float32)
-            for class_idx in range(self.num_classes):
-                mask_onehot[class_idx][mask_mapped == class_idx] = 1.0
+        # image transforms
+        if self.transform:
+            image = self.transform(image)
+        else:
+            image = transforms.ToTensor()(image)
 
-            # Convert mask to tensor
-            mask_tensor = torch.tensor(mask_mapped, dtype=torch.long)
+        # mask transforms
+        if self.target_transform:
+            mask_tensor = self.target_transform(mask_tensor)
 
-            # Apply transformations
-            if self.transform:
-                image = self.transform(image)
-            else:
-                image = transforms.ToTensor()(image)
-
-            if self.target_transform:
-                mask_tensor = self.target_transform(mask_tensor)
-
-            return image, mask_tensor
-        except Exception as e:
-            print(f"Error processing index {idx}: {e}")
-            raise e
-        
+        return image, mask_tensor
+    
 class StructuralDamageModel(L.LightningModule):
     def __init__(self, arch, encoder_name, in_channels, out_classes):
         super().__init__()

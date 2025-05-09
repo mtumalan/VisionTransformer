@@ -3,3 +3,6 @@ venv/
 
 VisionChallenge/
 logs/
+.env
+media/ 
+db.sqlite3

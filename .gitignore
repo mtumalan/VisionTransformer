@@ -1,8 +1,99 @@
-venv
-venv/
+# ─── Python / Django ───────────────────────────────────────────────────────────────
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
 
+# Virtual environments
+venv/
+.env/
+.env
+env/
+ENV/
+.venv/
+
+# Django
+db.sqlite3
+media/
+staticfiles/
+*.log
+
+# Celery
+celerybeat-schedule
+*.pid
+
+# Coverage / test reports
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+htmlcov/
+coverage.xml
+nosetests.xml
+django_extensions.log
+
+# Build / packaging
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+sdist/
+var/
+*.egg
+
+# ─── Node / Next.js ────────────────────────────────────────────────────────────────
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+build/
+dist/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ─── Docker / Compose ─────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── IDEs / Editors / OS ─────────────────────────────────────────────────────────
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# VSCode
+.vscode/
+# JetBrains (PyCharm, WebStorm, etc.)
+.idea/
+*.iml
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Vim swap files
+*.swp
+*.swo
+
+# Emacs
+*~
+.*.swp
+
+# ─── Custom Folders / Logs ─────────────────────────────────────────────────────────
 VisionChallenge/
 logs/
-.env
-media/ 
-db.sqlite3
+
+# End of .gitignore

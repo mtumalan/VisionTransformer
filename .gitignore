@@ -6,3 +6,8 @@ logs/
 .env
 media/ 
 db.sqlite3
+*.png
+model/lightning_logs
+*.pyc
+*.ckpt
+*.txt

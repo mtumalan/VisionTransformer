@@ -32,19 +32,5 @@ services:
       - db
       - redis
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    command: npm run dev
-    volumes:
-      - ./frontend:/app
-    ports:
-      - "3000:3000"
-    env_file:
-      - ./.env
-    depends_on:
-      - backend
-
 volumes:
   postgres_data:

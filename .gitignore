@@ -51,6 +51,7 @@ node_modules/
 out/
 build/
 dist/
+package-lock.json
 
 # Logs
 npm-debug.log*

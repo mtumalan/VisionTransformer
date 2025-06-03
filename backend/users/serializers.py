@@ -23,3 +23,21 @@ class RegisterSerializer(serializers.ModelSerializer):
             last_name=validated_data.get('last_name', '')
         )
         return user
+
+class LoginSerializer(serializers.Serializer):
+    """
+    Serializer for user login.
+    Expects: username, password.
+    """
+    username = serializers.CharField(required=True)
+    password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+
+    def validate(self, data):
+        from django.contrib.auth import authenticate
+        user = authenticate(username=data['username'], password=data['password'])
+        if user is None:
+            raise serializers.ValidationError('Invalid username or password.')
+        if not user.is_active:
+            raise serializers.ValidationError('User account is disabled.')
+        data['user'] = user
+        return data

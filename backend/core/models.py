@@ -1,4 +1,4 @@
-import os, uuid
+import uuid
 from pathlib import Path
 from django.db import models
 

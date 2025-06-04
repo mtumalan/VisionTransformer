@@ -27,12 +27,13 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "fallback-secret")
 DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = [
-    "http://localhost:8000",
-    "http://127.0.0.1:8000"
+    "http://172.20.100.67:8000",
+    "http://172.20.100.67:80",
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
+    "http://172.20.100.28:3000",
+    "http://172.20.100.28:443",
 ]
 
 MEDIA_URL = '/media/'

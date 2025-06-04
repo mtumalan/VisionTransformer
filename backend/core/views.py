@@ -1,70 +1,72 @@
-from django.views.generic.edit import CreateView
-from django.views.generic.list import ListView
-from rest_framework.views import APIView
+# backend/apps/core/views.py
+
+from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
-from rest_framework import status
-from django.urls import reverse_lazy
-from .models import Photo, VisionModel
-from .forms import PhotoForm
+from rest_framework.decorators import action
+from .models import VisionModel, InferenceJob
+from .serializers import VisionModelSerializer, InferenceJobSerializer
 
-import requests
-class PhotoUploadView(CreateView):
-    model = Photo
-    form_class = PhotoForm
-    template_name = 'core/upload.html'
-    success_url = reverse_lazy('gallery')
-
-
-class GalleryView(ListView):
-    model = Photo
-    template_name = 'core/gallery.html'
-    context_object_name = 'photos'
-    ordering = ['-uploaded_at']
+class VisionModelViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /api/v1/vision-models/          → list all models
+    GET /api/v1/vision-models/{id}/     → retrieve one model
+    """
+    queryset = VisionModel.objects.all().order_by("name")
+    serializer_class = VisionModelSerializer
+    permission_classes = [permissions.AllowAny]
 
 
-class AnalyzeView(APIView):
-    def post(self, request):
-        image = request.FILES.get('image')
-        model_name = request.data.get('model_name')
+class InferenceJobViewSet(viewsets.ModelViewSet):
+    """
+    - list (GET     /api/v1/inference-jobs/)       → all jobs for the logged‐in user
+    - create (POST  /api/v1/inference-jobs/)       → new job (upload image + pick model)
+    - retrieve (GET /api/v1/inference-jobs/{id}/)  → user’s own job detail (see status, mask_image URL)
+    - update/partial_update (PATCH) /api/v1/inference-jobs/{id}/ → (optional) you might allow the orchestrator to PATCH
+    - destroy (DELETE) … maybe never needed for public
+    """
 
-        if not image or not model_name:
-            return Response({'error': 'Missing required fields.'}, status=status.HTTP_400_BAD_REQUEST)
+    serializer_class = InferenceJobSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
-        photo = Photo.objects.create(title=f"_upload", image=image)
+    def get_queryset(self):
+        # Each user only sees their own jobs
+        return InferenceJob.objects.filter(user=self.request.user)
 
-        try:
-            vision_model = VisionModel.objects.get(name=model_name)
-        except VisionModel.DoesNotExist:
-            return Response({'error': 'Model not found.'}, status=status.HTTP_404_NOT_FOUND)
+    def perform_create(self, serializer):
+        # The serializer.create() method already pulls in `user=request.user`
+        serializer.save()
 
-        external_url = "http://external-instance/analyze"  # TODO: use actual external service URL
-        files = {'image': photo.image.open('rb')}
-        data = {
-            'model_name': vision_model.name,
-        }
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def complete(self, request, pk=None):
+        """
+        (Optional) If you prefer giving the orchestrator
+        a single “/complete/” endpoint to upload the mask image:
+        
+        POST /api/v1/inference-jobs/{job_uuid}/complete/
+        { mask_image: <file> }
+        
+        This action sets status="DONE" and saves mask_image.
+        You could also accept a JSON URL, etc.
+        """
 
-        try:
-            response = requests.post(external_url, files=files, data=data)
-            response.raise_for_status()
-            external_result = response.json()
-        except Exception as e:
-            return Response({'error': f'External request failed: {str(e)}'}, status=status.HTTP_502_BAD_GATEWAY)
+        job = self.get_object()
+        if job.status not in ["PENDING", "PROCESSING"]:
+            return Response(
+                {"error": "Job is already completed or failed."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        return Response(external_result, status=status.HTTP_200_OK)
+        mask_file = request.FILES.get("mask_image")
+        if not mask_file:
+            return Response(
+                {"error": "mask_image file is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class VisionModelListView(APIView):
-    def get(self):
-        models = VisionModel.objects.all()
-        data = [
-            {
-                'id': m.id,
-                'name': m.name,
-                'description': m.description,
-                'num_classes': m.num_classes,
-                'input_size': m.input_size,
-                'added_at': m.added_at,
-            }
-            for m in models
-        ]
-        return Response(data)
+        job.mask_image = mask_file
+        job.status = "DONE"
+        job.save(update_fields=["mask_image", "status", "updated_at"])
+        return Response(
+            InferenceJobSerializer(job, context={"request": request}).data,
+            status=status.HTTP_200_OK
+        )

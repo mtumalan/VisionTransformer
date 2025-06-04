@@ -28,7 +28,8 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
 
 
 ALLOWED_HOSTS = [
-    "172.20.100.67",    
+    "172.20.100.67", 
+    "172.20.100.171",   
     "localhost",        
     "127.0.0.1",        
 ]

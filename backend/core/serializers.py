@@ -53,3 +53,14 @@ class InferenceJobSerializer(serializers.ModelSerializer):
         # vision_model and input_image are already in validated_data
         job = InferenceJob.objects.create(user=user, **validated_data)
         return job
+
+class HelloWorldSerializer(serializers.Serializer):
+    """
+    Simple serializer for a hello world message.
+    """
+    message = serializers.CharField(default="Hello, World!")
+    
+    def validate_message(self, value):
+        if not value:
+            raise serializers.ValidationError("Message cannot be empty.")
+        return value

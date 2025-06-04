@@ -42,12 +42,12 @@ class LoginSerializer(serializers.Serializer):
         data['user'] = user
         return data
     
-class HelloSerializer(serializers.Serializer):
+class HelloWorldSerializer(serializers.Serializer):
     """
-    Simple serializer to return a greeting message.
+    Simple serializer for a hello world message.
     """
-    message = serializers.CharField(default="Hello, world!")
-
+    message = serializers.CharField(default="Hello, World!")
+    
     def validate_message(self, value):
         if not value:
             raise serializers.ValidationError("Message cannot be empty.")

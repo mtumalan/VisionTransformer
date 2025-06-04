@@ -1,9 +1,13 @@
-from django.urls import path
-from .views import PhotoUploadView, GalleryView, AnalyzeView, VisionModelListView
+# backend/apps/core/urls.py
+
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import VisionModelViewSet, InferenceJobViewSet
+
+router = DefaultRouter()
+router.register(r"vision-models", VisionModelViewSet, basename="visionmodel")
+router.register(r"inference-jobs", InferenceJobViewSet, basename="inferencejob")
 
 urlpatterns = [
-    path('upload/', PhotoUploadView.as_view(), name='upload_photo'),
-    path('', GalleryView.as_view(), name='gallery'),
-	path('analyze/', AnalyzeView.as_view(), name='analyze_photo'),
-    path('models/', VisionModelListView.as_view(), name='list_models'),
+    path("api/v1/", include(router.urls)),
 ]

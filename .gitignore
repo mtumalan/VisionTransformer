@@ -97,4 +97,5 @@ ehthumbs.db
 VisionChallenge/
 logs/
 
+*.pem
 # End of .gitignore

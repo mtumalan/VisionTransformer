@@ -26,9 +26,11 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "fallback-secret")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
 
+
 ALLOWED_HOSTS = [
-    "http://172.20.100.67:8000",
-    "http://172.20.100.67:80",
+    "172.20.100.67",    
+    "localhost",        
+    "127.0.0.1",        
 ]
 
 CORS_ALLOWED_ORIGINS = [
@@ -38,6 +40,8 @@ CORS_ALLOWED_ORIGINS = [
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Application definition
 

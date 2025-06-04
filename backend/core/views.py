@@ -4,7 +4,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from .models import VisionModel, InferenceJob
-from .serializers import VisionModelSerializer, InferenceJobSerializer
+from .serializers import VisionModelSerializer, InferenceJobSerializer, HelloWorldSerializer
 
 class VisionModelViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -70,3 +70,14 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
             InferenceJobSerializer(job, context={"request": request}).data,
             status=status.HTTP_200_OK
         )
+
+class HelloWorldViewSet(viewsets.ViewSet):
+    """
+    A simple view to return a "Hello, World!" message.
+    This is just an example to show how to create a custom viewset.
+    """
+    
+    def list(self, request):
+        serializer = HelloWorldSerializer(data={"message": "Hello, World!"})
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

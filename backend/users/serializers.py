@@ -41,3 +41,14 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError('User account is disabled.')
         data['user'] = user
         return data
+    
+class HelloSerializer(serializers.Serializer):
+    """
+    Simple serializer to return a greeting message.
+    """
+    message = serializers.CharField(default="Hello, world!")
+
+    def validate_message(self, value):
+        if not value:
+            raise serializers.ValidationError("Message cannot be empty.")
+        return value

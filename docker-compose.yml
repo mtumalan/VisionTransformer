@@ -1,29 +1,50 @@
-version: '3.9'
+version: "3.9"
 
 services:
-  web:
-    build: ./app
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./app:/app
-      - ./app/media:/app/media
-    env_file:
-      - .env
-    depends_on:
-      - db
-    command: >
-      sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
-
   db:
     image: postgres:15
+    container_name: postgres_db
+    restart: always
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB:       ${POSTGRES_DB}
+      POSTGRES_USER:     ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Publish port 5432 so the backend container can reach it via "db:5432"
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    restart: always
+    # Publish port 6379 so the backend container can reach it via "redis:6379"
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: django_backend
+    restart: always
+    # 1) Run migrations, collectstatic, then launch Gunicorn
+    command: >
+      sh -c "
+        python manage.py migrate --noinput &&
+        python manage.py collectstatic --noinput &&
+        gunicorn project.wsgi:application --workers 3 --bind 0.0.0.0:8000
+      "
+    # Expose port 80 so that your external Nginx LB (running on the host or another VM)
+    # can connect to http://<HOST_IP>:80
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+      - redis
 
 volumes:
   postgres_data:

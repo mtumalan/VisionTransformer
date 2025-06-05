@@ -63,8 +63,8 @@ test_dataloader = DataLoader(test_dataset, batch_size=4, shuffle=False, num_work
 # Instantiate
 
 #model = LightningViTModel(num_classes=num_classes, patch_size = 16, hidden_size = 512,num_hidden_layers = 8,num_attention_heads = 8)
-model = PAEDTrainer(num_classes=num_classes, patch_size = 16, hidden_size = 768,num_hidden_layers = 12,num_attention_heads = 12)
-earlystop_callback = EarlyStopping(monitor="val_loss", patience=5, verbose=True, mode="min")
+model = PAEDTrainer(num_classes=num_classes, patch_size = 8, hidden_size = 1024,num_hidden_layers = 16,num_attention_heads = 16)
+earlystop_callback = EarlyStopping(monitor="val_loss", patience=6, verbose=True, mode="min")
 logger = CSVLogger(save_dir="logs/", name="vit-model")
 
 trainer = L.Trainer(

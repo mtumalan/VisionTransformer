@@ -60,7 +60,8 @@ print(classdict_path)
 rgb_to_class, class_names = load_classdict(classdict_path)
 num_classes = len(class_names)
 
-train_path  = cwd + '/../VisionChallenge/Attachments/Attachments'
+#train_path  = cwd + '/../VisionChallenge/Attachments/Attachments'
+train_path  = cwd + '/../VisionChallenge/Attachments/shifted'
 print(train_path)
 
 image_dir = os.path.join(train_path, 'image_png')
@@ -93,12 +94,9 @@ valid_dataloader = DataLoader(valid_dataset, batch_size=4, shuffle=False, num_wo
 test_dataloader = DataLoader(test_dataset, batch_size=4, shuffle=False, num_workers=2, persistent_workers=True)
 
 # Instantiate
-# 0 1 2 - 3 4 5 - 6(pendiente)
 configurations = [
-    {'ID': 16, 'patch_size': 16, 'hidden_size': 512, 'hidden_layers': 8, 'attention_heads': 8},
-
-    {'ID': 0, 'patch_size': 16, 'hidden_size': 768, 'hidden_layers': 12, 'attention_heads': 12},
-    {'ID': 1, 'patch_size': 16, 'hidden_size': 512, 'hidden_layers': 8, 'attention_heads': 8},
+    {'ID': 0, 'patch_size': 16, 'hidden_size': 512, 'hidden_layers': 8, 'attention_heads': 8},
+    {'ID': 1, 'patch_size': 16, 'hidden_size': 768, 'hidden_layers': 12, 'attention_heads': 12},
     {'ID': 2, 'patch_size': 16, 'hidden_size': 1024, 'hidden_layers': 16, 'attention_heads': 16},
     {'ID': 3, 'patch_size': 8, 'hidden_size': 512, 'hidden_layers': 8, 'attention_heads': 8},
     {'ID': 4, 'patch_size': 8, 'hidden_size': 768, 'hidden_layers': 12, 'attention_heads': 12},
@@ -106,14 +104,6 @@ configurations = [
     {'ID': 6, 'patch_size': 4, 'hidden_size': 512, 'hidden_layers': 8, 'attention_heads': 8},
     {'ID': 7, 'patch_size': 4, 'hidden_size': 768, 'hidden_layers': 12, 'attention_heads': 12},
     {'ID': 8, 'patch_size': 4, 'hidden_size': 1024, 'hidden_layers': 16, 'attention_heads': 16},
-
-    {'ID': 9, 'patch_size': 16, 'hidden_size': 512, 'hidden_layers': 8, 'attention_heads': 8},
-    {'ID': 10, 'patch_size': 16, 'hidden_size': 768, 'hidden_layers': 12, 'attention_heads': 12},
-    {'ID': 11, 'patch_size': 16, 'hidden_size': 1024, 'hidden_layers': 16, 'attention_heads': 16},
-    {'ID': 12, 'patch_size': 8, 'hidden_size': 512, 'hidden_layers': 8, 'attention_heads': 8},
-    {'ID': 13, 'patch_size': 8, 'hidden_size': 768, 'hidden_layers': 12, 'attention_heads': 12},
-    {'ID': 14, 'patch_size': 8, 'hidden_size': 1024, 'hidden_layers': 16, 'attention_heads': 16},
-    {'ID': 15, 'patch_size': 4, 'hidden_size': 512, 'hidden_layers': 8, 'attention_heads': 8},
 ]
 
 for config in configurations:
@@ -123,6 +113,7 @@ for config in configurations:
     hidden_layers = config['hidden_layers']
     attention_heads = config['attention_heads']
     print(f"Testing Version {version_n}: Patch Size {patch_size}, Hidden Size {hidden_size}, Hidden Layers {hidden_layers}, Attention Heads {attention_heads}")
+    '''
     model = LightningViTModel(
         num_classes=num_classes,
         patch_size=patch_size,
@@ -130,7 +121,8 @@ for config in configurations:
         num_hidden_layers=hidden_layers,
         num_attention_heads=attention_heads
     )
-
+'''
+    model = PAEDTrainer(num_classes=num_classes, patch_size = 16, hidden_size = 512,num_hidden_layers = 8,num_attention_heads = 8)
     # Definir ruta del checkpoint
     checkpoint_path = get_latest_checkpoint(version_n, cwd)
 

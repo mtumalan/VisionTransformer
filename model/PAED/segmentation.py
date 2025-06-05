@@ -11,19 +11,28 @@ def compute_sdf(mask: np.ndarray):
         mask (np.ndarray): máscara binaria 2D (H, W), con valores {0,1}
 
     Returns:
-        sdf_ext (np.ndarray): distancia desde el fondo a la frontera, 0 fuera del objeto
-        sdf_int (np.ndarray): distancia desde el interior al borde, 0 fuera del objeto
+        sdf_ext (np.ndarray): distancia normalizada desde el fondo a la frontera, 0 fuera del objeto
+        sdf_int (np.ndarray): distancia normalizada desde el interior al borde, 0 fuera del objeto
     """
-    # Asegurarse que la máscara es binaria
-    #mask = mask.astype(bool)
 
-    # Distancia al borde desde el fondo (exterior)
-    sdf_ext = distance_transform_edt(mask)  # fuera del objeto
+    # Validar máscara binaria
+    mask = mask.astype(bool)
 
-    # Distancia al borde desde el interior
-    sdf_int = distance_transform_edt(mask)   # dentro del objeto
+    # Distancia desde el fondo (pixels 0) al borde del objeto
+    sdf_ext = distance_transform_edt(~mask).astype(np.float32)
+
+    # Distancia desde el interior (pixels 1) al borde del objeto
+    sdf_int = distance_transform_edt(mask).astype(np.float32)
+
+    # Normalización a [0, 1]
+    if sdf_ext.max() > 0:
+        sdf_ext /= sdf_ext.max()
+
+    if sdf_int.max() > 0:
+        sdf_int /= sdf_int.max()
 
     return sdf_ext, sdf_int
+
 
 
 def pixel_accuracy(gt: torch.Tensor, pred: torch.Tensor) -> torch.Tensor:

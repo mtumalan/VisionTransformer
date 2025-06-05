@@ -33,78 +33,47 @@ import segmentation
 import numpy as np
 #from skimage.morphology import skeletonize as skimage_skeletonize
 
-
 class StructuralDamageDataset(Dataset):
-    def __init__(self, image_dir, mask_dir, classdict_path=None, transform=None, target_transform=None, lazy_class_mapping=True):
+    def __init__(self, image_dir, mask_dir, transform=None, target_transform=None):
         self.image_dir = image_dir
         self.mask_dir = mask_dir
-        self.classdict_path = classdict_path
         self.images = sorted(os.listdir(image_dir))
         self.masks = sorted(os.listdir(mask_dir))
         self.transform = transform
         self.target_transform = target_transform
-        self.lazy_class_mapping = lazy_class_mapping  # Option to defer class mapping
 
         if len(self.images) != len(self.masks):
             raise ValueError("Number of images and masks must be equal!")
 
-        if not lazy_class_mapping:
-            # Process all masks to build class mapping
-            self._build_class_mapping()
-        else:
-            self.unique_values = None  # Will be lazily built
-
-    def _build_class_mapping(self):
-        # Efficiently compute unique values across the dataset
-        all_values = set()
-        for mask_file in self.masks:
-            mask_path = os.path.join(self.mask_dir, mask_file)
-            mask = np.array(Image.open(mask_path).convert('L'))
-            all_values.update(np.unique(mask))
-
-        self.unique_values = sorted(all_values)  # Ensure consistent ordering
-        self.value_to_class = {v: i for i, v in enumerate(self.unique_values)}
-        self.num_classes = len(self.unique_values)
-
     def __len__(self):
         return len(self.images)
 
-    def _lazy_class_mapping(self):
-        if self.unique_values is None:
-            self._build_class_mapping()
-
     def __getitem__(self, idx):
         try:
-            # Build the class mapping lazily if needed
-            if self.lazy_class_mapping:
-                self._lazy_class_mapping()
-
             # Get paths
             img_path = os.path.join(self.image_dir, self.images[idx])
             mask_path = os.path.join(self.mask_dir, self.masks[idx])
 
             # Load the image and mask
-            image = Image.open(img_path).convert('RGB')  # RGB image
-            mask = Image.open(mask_path).convert('L')    # Grayscale mask (class indices)
+            image = Image.open(img_path).convert('RGB')
+            mask = Image.open(mask_path).convert('L')  # Binary grayscale mask (0 or 255)
 
-            
             # Resize mask
-            mask = transforms.Resize((256, 256), interpolation=transforms.InterpolationMode.NEAREST)(mask)
-            mask_np = np.array(mask, dtype=np.int64)
+            mask = transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.NEAREST)(mask)
+            mask_np = np.array(mask, dtype=np.uint8)
 
-            # Remap mask values to class indices
-            mask_mapped = np.vectorize(self.value_to_class.get)(mask_np)
+            # Binarize: convert 255 → 1
+            mask_np = (mask_np > 127).astype(np.uint8)
 
-            # Convert to one-hot encoding
-            mask_onehot = np.zeros((self.num_classes, mask_np.shape[0], mask_np.shape[1]), dtype=np.float32)
-            for class_idx in range(self.num_classes):
-                mask_onehot[class_idx][mask_mapped == class_idx] = 1.0
-            sdf_ext, sdf_int = segmentation.compute_sdf(mask)
-            # Convert mask to tensor
-            mask_tensor = torch.tensor(mask_mapped, dtype=torch.long)
-            sdf_ext = torch.tensor(sdf_ext).float()
-            sdf_int = torch.tensor(sdf_int).float()
-            # Apply transformations
+            # Compute SDFs (you likely want binary mask here)
+            sdf_ext, sdf_int = segmentation.compute_sdf(mask_np)
+
+            # Convert to tensors
+            mask_tensor = torch.tensor(mask_np, dtype=torch.float32).unsqueeze(0)  # (1, H, W)
+            sdf_ext = torch.tensor(sdf_ext, dtype=torch.float32)
+            sdf_int = torch.tensor(sdf_int, dtype=torch.float32)
+
+            # Apply transforms
             if self.transform:
                 image = self.transform(image)
             else:
@@ -114,9 +83,11 @@ class StructuralDamageDataset(Dataset):
                 mask_tensor = self.target_transform(mask_tensor)
 
             return image, mask_tensor, sdf_ext, sdf_int
+
         except Exception as e:
             print(f"Error processing index {idx}: {e}")
             raise e
+
         
 class StructuralDamageModel(L.LightningModule):
     def __init__(self, arch, encoder_name, in_channels, out_classes):
@@ -286,6 +257,82 @@ def paed_loss(msk, pred_mask, threshold=0.35):
 
     return total_paed / batch_size
 """
+
+
+'''
+hola put
+
+def paed_loss_soft(gt_sdf_ext, gt_sdf_int, preds):
+    # preds: (B,1,H,W) ∈ [0,1]
+    # gt_sdf_ext/int: (B,H_sdf,W_sdf) which you’ll upsample to (H,W)
+
+    B,_,Hpred,Wpred = preds.shape
+    device = preds.device
+
+    # 1) Resize GT SDFs
+    #   Original code:
+    #   sdf_ext_b = F.interpolate(sdf_ext_b.unsqueeze(0).unsqueeze(0), size=(Hpred,Wpred), …)
+    #   …
+    #   Let’s vectorize that:
+    gt_sdf_ext = F.interpolate(gt_sdf_ext.unsqueeze(1), size=(Hpred,Wpred), mode='bilinear', align_corners=False)
+    gt_sdf_int = F.interpolate(gt_sdf_int.unsqueeze(1), size=(Hpred,Wpred), mode='bilinear', align_corners=False)
+    # Now gt_sdf_ext, gt_sdf_int have shape (B,1,H,W)
+
+    # 2) Build a Sobel filter to get a soft edge map
+    sobel_x = torch.tensor([[1,0,-1],[2,0,-2],[1,0,-1]], device=device, dtype=torch.float32).view(1,1,3,3)
+    sobel_y = sobel_x.transpose(2,3)
+    grad_x = F.conv2d(preds, sobel_x, padding=1)
+    grad_y = F.conv2d(preds, sobel_y, padding=1)
+    edge_map = torch.sqrt(grad_x**2 + grad_y**2 + 1e-6)  # shape (B,1,H,W)
+
+    # 3) Normalize edge_map so that it maxes to 1 (optional but often helpful)
+    #    Compute per-batch or per-image max:
+    max_per_image = edge_map.view(B, -1).max(dim=1)[0].view(B,1,1,1) + 1e-6
+    edge_map = edge_map / max_per_image
+
+    # 4) Compute “external” penalty: high where preds’ edges are far from GT boundary
+    external_term = (gt_sdf_ext * edge_map).mean()
+
+    # 5) “Internal” reward: encourage preds to occupy regions where GT interior is high
+    internal_term = (gt_sdf_int * preds).mean()
+
+    # 6) Final PAED‐style loss (you can tweak weights)
+    paed = external_term - internal_term
+    return paed
+
+# And in your forward step:
+def _forward_step_paed(self, batch, batch_idx):
+    images, masks, sdf_ext, sdf_int = batch
+    masks = self._resize_target(masks, size=(224, 224))   # shape (B,H,W)
+    outputs = self.model(images)                           # (B,1,H,W)
+    preds = torch.sigmoid(outputs)                         # (B,1,H,W), float ∈ [0,1]
+
+    # reshape sdf_ext/int: from (B,H_sdf,W_sdf) → (B,1,H_sdf,W_sdf)
+    sdf_ext = sdf_ext.unsqueeze(1)
+    sdf_int = sdf_int.unsqueeze(1)
+
+    loss = self.paed_loss_soft(sdf_ext, sdf_int, preds)
+
+    # …compute metrics on binarized preds if you want:
+    bin_preds = (preds > 0.5).int().squeeze(1)  # (B,H,W)
+    acc = segmentation.pixel_accuracy(masks, bin_preds)
+    iou = segmentation_metrics.mean_iou(bin_preds, masks.int(), num_classes=1, include_background=False).mean()
+    dice = segmentation.dice_score(masks.int(), bin_preds)
+    prec = classification_metrics.precision(bin_preds, masks.int(), task='binary', multidim_average='global')
+    rec = classification_metrics.recall(bin_preds, masks.int(), task='binary', multidim_average='global')
+
+    self.log_dict({
+        "train_loss": loss,
+        "train_acc": acc,
+        "train_IoU": iou,
+        "train_dice": dice,
+        "train_precision": prec,
+        "train_recall": rec
+    }, on_epoch=True)
+
+    return loss
+'''
+
 def paed_loss_multiclass_soft(msk, pred_mask, num_classes=17, sigma=3, class_penalty=True):
 
     batch_size, C, H, W = msk.shape
@@ -364,6 +411,7 @@ class ViTSegmentationModel(nn.Module):
         out = nn.functional.interpolate(out, size=x.shape[2:], mode='bilinear', align_corners=False)
 
         return out
+
 class LightningViTModel(L.LightningModule):
     def __init__(self, num_classes, patch_size, hidden_size,num_hidden_layers,num_attention_heads):
         super().__init__()
@@ -445,18 +493,32 @@ class PAEDTrainer(L.LightningModule):
         super().__init__()
         self.model = ViTSegmentationModel(num_classes, patch_size, hidden_size,num_hidden_layers,num_attention_heads)
         #self.model = model
-    def _resize_target(self, y, size):
-        return F.interpolate(y.unsqueeze(1).float(), size=size, mode='nearest').squeeze(1).long()
+    def _resize_target(self, y: torch.Tensor, size=(224, 224)) -> torch.Tensor:
+        """
+        Resize target masks to a fixed size, handling both [B, H, W] and [B, 1, H, W] shapes.
+        """
+        if y.dim() == 3:  # [B, H, W]
+            y = y.unsqueeze(1)  # → [B, 1, H, W]
+        elif y.dim() == 4 and y.shape[1] != 1:
+            raise ValueError(f"Expected single-channel mask but got shape {y.shape}")
+
+        y_resized = F.interpolate(y.float(), size=size, mode='nearest')  # → [B, 1, H, W]
+        return y_resized.squeeze(1).long()  # → [B, H, W]
+
     def training_step(self, batch, batch_idx) -> Tensor:
-        loss, accuracy, iou, dice, precision, recall, _ = self._forward_step(batch, batch_idx)
+        loss, accuracy, iou, dice, precision, recall = self._forward_step(batch, batch_idx)
+        #loss = self._forward_step(batch, batch_idx)
         self.log_dict({"train_loss": loss, "train_acc": accuracy, "train_IoU": iou, "train_recall": recall, "train_dice": dice, "train_precision": precision}, on_epoch=True)
+        self.log_dict({"train_loss": loss}, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx) -> Tensor:
-        loss, accuracy, iou, dice, precision, recall, grid = self._forward_step(batch, batch_idx)
+        loss, accuracy, iou, dice, precision, recall = self._forward_step(batch, batch_idx) #grid = self._forward_step(batch, batch_idx)
+        #loss = self._forward_step(batch, batch_idx)
+        #self.log_dict({"val_loss": loss}, on_epoch=True)
         self.log_dict({"val_loss": loss, "val_acc": accuracy, "val_IoU": iou, "val_recall": recall, "val_dice": dice, "val_precision": precision}, on_epoch=True)
-        if grid is not None:
-            self.logger.experiment.add_image('predictions', grid, self.global_step)
+        #if grid is not None:
+        #    self.logger.experiment.add_image('predictions', grid, self.global_step)
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -464,8 +526,8 @@ class PAEDTrainer(L.LightningModule):
         metrics = {
             "test_acc": accuracy, "test_IoU": iou, "test_recall": recall, "test_dice": dice, "test_precision": precision}
         self.log_dict(metrics, on_epoch=True)
-        if grid is not None:
-            self.logger.experiment.add_image('predictions', grid, self.global_step)
+        #if grid is not None:
+        #    self.logger.experiment.add_image('predictions', grid, self.global_step)
         return metrics
 
     def forward(self, x) -> Tensor:
@@ -490,7 +552,8 @@ class PAEDTrainer(L.LightningModule):
         total_paed = torch.zeros(1, device=target.device, requires_grad=True)
 
         for b in range(batch_size):
-            pred_mask_b = prediction[b].squeeze()  # (H_pred, W_pred)
+            pred_mask_b = prediction[b].squeeze()
+            pred_mask_b = (pred_mask_b > 0.5).float()
             pred_mask_b_skeletonize = CrackSeg.skeletonize(pred_mask_b)
 
             # SDFs originales (probablemente con resolución distinta, e.g., 1024x1024)
@@ -503,7 +566,12 @@ class PAEDTrainer(L.LightningModule):
             sdf_int_b = F.interpolate(sdf_int_b.unsqueeze(0).unsqueeze(0), size=target_shape, mode='bilinear', align_corners=False).squeeze()
 
             # PAED Loss
-            distances = torch.sum(sdf_ext_b * pred_mask_b_skeletonize - 10 * sdf_int_b * pred_mask_b)
+            sdf_ext_b = sdf_ext_b.detach()
+            sdf_int_b = sdf_int_b.detach()
+
+            distances = torch.sum(sdf_ext_b * pred_mask_b_skeletonize - sdf_int_b * (pred_mask_b > 0.5).float())
+
+            #distances = torch.sum(sdf_ext_b * pred_mask_b_skeletonize - 10 * sdf_int_b * pred_mask_b)
             total_paed = total_paed + distances
 
         return total_paed / batch_size
@@ -511,45 +579,21 @@ class PAEDTrainer(L.LightningModule):
 
     def _forward_step(self, batch, batch_idx):
         return self._forward_step_paed(batch, batch_idx)
-
-    def _forward_step_joint_loss(self, batch, batch_idx):
-        images, masks = batch
-        masks = self._resize_target(masks, size=(224, 224))
-        outputs = self.model(images)
-        criterion = segmentation.JointDiceBCEWithLogitsLoss(0.8)
-        loss = criterion(outputs, masks)
-        predictions = functional.sigmoid(outputs.detach())
-        preds = (predictions > 0.5).int()
-        accuracy = segmentation.pixel_accuracy(masks, preds)
-        iou = segmentation_metrics.mean_iou(preds, masks.int(), num_classes=1,
-                                            include_background=False, per_class=False).mean()
-        dice = segmentation_metrics.dice_score(preds, masks.int(), num_classes=1,
-                                               include_background=False, average='macro').mean()
-        precision = classification_metrics.precision(preds, masks.int(), task='binary',
-                                                     multidim_average='global')
-        recall = classification_metrics.recall(preds, masks.int(), task='binary',
-                                               multidim_average='global')
-        if iou.isnan().item():
-            iou = torch.zeros(1, device=iou.device)
-        grid = None
-        if batch_idx == 0:
-            grid = torchvision.utils.make_grid(predictions)
-        return loss, accuracy, iou, dice, precision, recall, grid
-
+    """
     def _forward_step_paed(self, batch, batch_idx):
         images, masks, sdf_ext, sdf_int = batch
         masks = self._resize_target(masks, size=(224, 224))
         outputs = self.model(images)
         predictions = functional.sigmoid(outputs)
+        preds = (predictions > 0.5).int().squeeze(1)  # [B, H, W]
         loss = self.paed_loss(predictions, masks, sdf_ext, sdf_int)
-        preds = (predictions.detach() > 0.5).int()
-        print(masks.shape)
-        print(preds.shape)
+        #preds = (predictions.detach() > 0.5).int()
+
         accuracy = segmentation.pixel_accuracy(masks, preds)
         iou = segmentation_metrics.mean_iou(preds, masks.int(), num_classes=1,
                                             include_background=False, per_class=False).mean()
-        dice = segmentation_metrics.dice_score(preds, masks.int(), num_classes=1,
-                                               include_background=False, average='macro').mean()
+        dice = segmentation.dice_score(masks.int(), preds)
+
         precision = classification_metrics.precision(preds, masks.int(), task='binary',
                                                      multidim_average='global')
         recall = classification_metrics.recall(preds, masks.int(), task='binary',
@@ -560,26 +604,98 @@ class PAEDTrainer(L.LightningModule):
         if batch_idx == 0:
             grid = torchvision.utils.make_grid(predictions)
         return loss, accuracy, iou, dice, precision, recall, grid
+    """
+    def dice_loss(self, preds, targets, smooth=1e-6):
+        # Asegura mismos shapes y tipo float
+        if targets.dim() == 3:
+            targets = targets.unsqueeze(1)
+        preds = preds.float()
+        targets = targets.float()
 
-    def _forward_step_likelihood(self, batch, batch_idx):
-        images, masks = batch
-        masks = masks.long().squeeze()
-        outputs = self.model(images)
-        criterion = CrossEntropyLoss()
-        loss = criterion(outputs, masks)
-        preds = torch.argmax(outputs.detach(), dim=1)
-        accuracy = segmentation.pixel_accuracy(masks, preds)
-        iou = segmentation_metrics.mean_iou(preds, masks.int(), num_classes=1,
-                                            include_background=False, per_class=False).mean()
-        dice = segmentation_metrics.dice_score(preds, masks.int(), num_classes=1,
-                                               include_background=False, average='macro').mean()
-        precision = classification_metrics.precision(preds, masks.int(), task='binary',
-                                                     multidim_average='global')
-        recall = classification_metrics.recall(preds, masks.int(), task='binary',
-                                               multidim_average='global')
-        if iou.isnan().item():
-            iou = torch.zeros(1, device=iou.device)
-        grid = None
-        if batch_idx == 0:
-            grid = torchvision.utils.make_grid(preds.unsqueeze(1))
-        return loss, accuracy, iou, dice, precision, recall, grid
+        # Flatten
+        preds_flat = preds.view(-1)
+        targets_flat = targets.view(-1)
+
+        intersection = torch.sum(preds_flat * targets_flat)
+        return 1 - (2. * intersection + smooth) / (preds_flat.sum() + targets_flat.sum() + smooth)
+
+
+    def paed_loss_soft(self, gt_sdf_ext, gt_sdf_int, preds):
+        # preds: (B,1,H,W) ∈ [0,1]
+        # gt_sdf_ext/int: (B,H_sdf,W_sdf) which you’ll upsample to (H,W)
+
+        B,_,Hpred,Wpred = preds.shape
+        device = preds.device
+
+        # 1) Resize GT SDFs
+        #   Original code:
+        #   sdf_ext_b = F.interpolate(sdf_ext_b.unsqueeze(0).unsqueeze(0), size=(Hpred,Wpred), …)
+        #   …
+        #   Let’s vectorize that:
+        gt_sdf_ext = F.interpolate(gt_sdf_ext, size=(Hpred,Wpred), mode='bilinear', align_corners=False)
+        gt_sdf_int = F.interpolate(gt_sdf_int, size=(Hpred,Wpred), mode='bilinear', align_corners=False)
+        # Now gt_sdf_ext, gt_sdf_int have shape (B,1,H,W)
+
+        # 2) Build a Sobel filter to get a soft edge map
+        sobel_x = torch.tensor([[1,0,-1],[2,0,-2],[1,0,-1]], device=device, dtype=torch.float32).view(1,1,3,3)
+        sobel_y = sobel_x.transpose(2,3)
+        grad_x = F.conv2d(preds, sobel_x, padding=1)
+        grad_y = F.conv2d(preds, sobel_y, padding=1)
+        edge_map = torch.sqrt(grad_x**2 + grad_y**2 + 1e-6)  # shape (B,1,H,W)
+
+        # 3) Normalize edge_map so that it maxes to 1 (optional but often helpful)
+        #    Compute per-batch or per-image max:
+        max_per_image = edge_map.view(B, -1).max(dim=1)[0].view(B,1,1,1) + 1e-6
+        edge_map = edge_map / max_per_image
+
+        # 4) Compute “external” penalty: high where preds’ edges are far from GT boundary
+        external_term = (gt_sdf_ext * edge_map).mean()
+
+        # 5) “Internal” reward: encourage preds to occupy regions where GT interior is high
+        internal_term = (gt_sdf_int * preds).mean()
+
+        # 6) Final PAED‐style loss (you can tweak weights)
+        paed = external_term - internal_term
+        paed = 1 * external_term - 0.5 * internal_term
+        #paed = torch.abs(paed)
+        return paed
+
+    # And in your forward step:
+    def _forward_step_paed(self, batch, batch_idx):
+        images, masks, sdf_ext, sdf_int = batch
+        masks = self._resize_target(masks, size=(224, 224))   # shape (B,H,W)
+        outputs = self.model(images)                           # (B,1,H,W)
+        preds = torch.sigmoid(outputs)                         # (B,1,H,W), float ∈ [0,1]
+
+        # reshape sdf_ext/int: from (B,H_sdf,W_sdf) → (B,1,H_sdf,W_sdf)
+        sdf_ext = sdf_ext.unsqueeze(1)
+        sdf_int = sdf_int.unsqueeze(1)
+
+        paed_loss = self.paed_loss_soft(sdf_ext, sdf_int, preds)
+        masks = masks.unsqueeze(1)  # (B, H, W) → (B, 1, H, W)
+        # Aseguramos que las máscaras tienen el tipo correcto (Float)
+        masks = masks.float()  # Convertir máscaras a float32
+
+        bce_loss = F.binary_cross_entropy(preds, masks)
+        dice_loss = self.dice_loss(preds, masks)
+        loss = bce_loss + 0.1 * dice_loss + 5.0 * torch.abs(paed_loss)
+
+        # …compute metrics on binarized preds if you want:
+        bin_preds = (preds > 0.5).int()  # (B,H,W)
+        acc = segmentation.pixel_accuracy(masks, bin_preds)
+        iou = segmentation_metrics.mean_iou(bin_preds, masks.int(), num_classes=1, include_background=False).mean()
+        dice = segmentation.dice_score(masks.int(), bin_preds)
+        prec = classification_metrics.precision(bin_preds, masks.int(), task='binary', multidim_average='global')
+        rec = classification_metrics.recall(bin_preds, masks.int(), task='binary', multidim_average='global')
+
+        self.log_dict({
+            "train_loss": loss,
+            "train_acc": acc,
+            "train_IoU": iou,
+            "train_dice": dice,
+            "train_precision": prec,
+            "train_recall": rec
+        }, on_epoch=True)
+
+        #return loss
+        return loss, acc, iou, dice, prec, rec #, grid

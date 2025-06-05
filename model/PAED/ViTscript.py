@@ -20,13 +20,14 @@ from sklearn.model_selection import train_test_split
 # --- Setup ---
 
 cwd = os.getcwd()
-classdict_path = cwd + '/../VisionChallenge/collaboration_it_mx/output_images/calss_names_colors_shift.csv'
+classdict_path = cwd + '/../../VisionChallenge/collaboration_it_mx/output_images/calss_names_colors_shift.csv'
 print(classdict_path)
 
 rgb_to_class = load_classdict(classdict_path)
 num_classes = len(rgb_to_class)
+num_classes = 1
 
-train_path  = cwd + '/../VisionChallenge/Attachments/shifted'#Attachments'
+train_path  = cwd + '/../../VisionChallenge/Attachments/shifted'#Attachments'
 print(train_path)
 
 image_dir = os.path.join(train_path, 'image_png')
@@ -51,9 +52,9 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-train_dataset = StructuralDamageDataset(image_dir, mask_dir, classdict_path, transform=transform)
-valid_dataset = StructuralDamageDataset(image_dir, mask_dir, classdict_path, transform=transform)
-test_dataset = StructuralDamageDataset(image_dir, mask_dir, classdict_path, transform=transform)
+train_dataset = StructuralDamageDataset(image_dir, mask_dir, transform=transform)
+valid_dataset = StructuralDamageDataset(image_dir, mask_dir, transform=transform)
+test_dataset = StructuralDamageDataset(image_dir, mask_dir, transform=transform)
 
 train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True, num_workers=2, persistent_workers=True)
 valid_dataloader = DataLoader(valid_dataset, batch_size=4, shuffle=False, num_workers=2, persistent_workers=True)
@@ -62,8 +63,8 @@ test_dataloader = DataLoader(test_dataset, batch_size=4, shuffle=False, num_work
 # Instantiate
 
 #model = LightningViTModel(num_classes=num_classes, patch_size = 16, hidden_size = 512,num_hidden_layers = 8,num_attention_heads = 8)
-model = PAEDTrainer(num_classes=num_classes, patch_size = 16, hidden_size = 512,num_hidden_layers = 8,num_attention_heads = 8)
-earlystop_callback = EarlyStopping(monitor="valid_loss", patience=3, verbose=True, mode="min")
+model = PAEDTrainer(num_classes=num_classes, patch_size = 16, hidden_size = 768,num_hidden_layers = 12,num_attention_heads = 12)
+earlystop_callback = EarlyStopping(monitor="val_loss", patience=5, verbose=True, mode="min")
 logger = CSVLogger(save_dir="logs/", name="vit-model")
 
 trainer = L.Trainer(

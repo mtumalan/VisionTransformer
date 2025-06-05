@@ -80,8 +80,8 @@ lv_checkpoint = cwd + '/logs/vit-model/version_8/checkpoints'
 lv_checkpoint2 = cwd + '/logs/vit-model/version_8/checkpoints/epoch=66-step=53504.ckpt' 
 checkpoint_callback = ModelCheckpoint(dirpath=lv_checkpoint)#"/content/drive/MyDrive/VisionChallenge/version_2/checkpoints") #version_20/checkpoints")
 checkpoint_path = lv_checkpoint2 #"/content/drive/MyDrive/SS3/epoch=19-step=4180.ckpt" #epoch=23-step=5016.ckpt"
-
-trainer = L.Trainer(callbacks=[checkpoint_callback],num_sanity_val_steps=0, max_epochs=100)
+earlystop_callback = EarlyStopping(monitor="val_loss", patience=5, verbose=True, mode="min")
+trainer = L.Trainer(callbacks=[checkpoint_callback, earlystop_callback],num_sanity_val_steps=0, max_epochs=100)
 trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=valid_dataloader, ckpt_path=checkpoint_path)
 
 valid_metrics = trainer.validate(model, dataloaders=valid_dataloader, verbose=False)

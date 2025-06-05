@@ -20,13 +20,13 @@ from sklearn.model_selection import train_test_split
 # --- Setup ---
 
 cwd = os.getcwd()
-classdict_path = cwd + '/VisionChallenge/collaboration_it_mx/output_images/calss_names_colors.csv'
+classdict_path = cwd + '/../../VisionChallenge/collaboration_it_mx/output_images/calss_names_colors.csv'
 print(classdict_path)
 
-rgb_to_class = load_classdict(classdict_path)
-num_classes = len(rgb_to_class)
+rgb_to_class, class_names = load_classdict(classdict_path)
+num_classes = len(class_names)
 
-train_path  = cwd + '/VisionChallenge/Attachments/Attachments'
+train_path  = cwd + '/../../VisionChallenge/Attachments/Attachments'
 print(train_path)
 
 image_dir = os.path.join(train_path, 'image_png')
@@ -60,7 +60,7 @@ test_dataloader = DataLoader(test_dataset, batch_size=4, shuffle=False, num_work
 
 # Instantiate
 
-model = LightningViTModel(num_classes=num_classes)
+model = LightningViTModel(num_classes=num_classes, patch_size = 16, hidden_size = 1024,num_hidden_layers = 16,num_attention_heads = 16)
 
 earlystop_callback = EarlyStopping(monitor="valid_loss", patience=3, verbose=True, mode="min")
 logger = CSVLogger(save_dir="logs/", name="vit-model")

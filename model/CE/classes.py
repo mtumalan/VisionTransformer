@@ -21,93 +21,87 @@ import torch.nn.functional as F
 from transformers import ViTModel, ViTConfig
 
 class StructuralDamageDataset(Dataset):
-    def __init__(
-        self,
-        image_dir,
-        mask_dir,
-        classdict_path=None,
-        transform=None,
-        target_transform=None,
-        lazy_class_mapping=True,
-        file_list: list[str] = None,
-    ):
+    def __init__(self, image_dir, mask_dir, classdict_path=None, transform=None, target_transform=None, lazy_class_mapping=True):
         self.image_dir = image_dir
-        self.mask_dir  = mask_dir
+        self.mask_dir = mask_dir
+        self.classdict_path = classdict_path
+        self.images = sorted(os.listdir(image_dir))
+        self.masks = sorted(os.listdir(mask_dir))
         self.transform = transform
         self.target_transform = target_transform
-        self.lazy_class_mapping = lazy_class_mapping
+        self.lazy_class_mapping = lazy_class_mapping  # Option to defer class mapping
 
-        # — determine which filenames to use —
-        if file_list is not None:
-            # explicit subset
-            self.files = sorted(file_list)
-        else:
-            # only keep those present in both dirs
-            imgs  = set(os.listdir(image_dir))
-            masks = set(os.listdir(mask_dir))
-            self.files = sorted(imgs & masks)
+        if len(self.images) != len(self.masks):
+            raise ValueError("Number of images and masks must be equal!")
 
-        if not self.files:
-            raise ValueError(
-                f"No matching files found in '{image_dir}' & '{mask_dir}'"
-            )
-
-        # prepare mapping (eagerly or lazily)
         if not lazy_class_mapping:
+            # Process all masks to build class mapping
             self._build_class_mapping()
         else:
-            self.unique_values = None
+            self.unique_values = None  # Will be lazily built
 
     def _build_class_mapping(self):
+        # Efficiently compute unique values across the dataset
         all_values = set()
-        for fname in self.files:
-            mask_path = os.path.join(self.mask_dir, fname)
+        for mask_file in self.masks:
+            mask_path = os.path.join(self.mask_dir, mask_file)
             mask = np.array(Image.open(mask_path).convert('L'))
             all_values.update(np.unique(mask))
 
-        self.unique_values = sorted(all_values)
+        self.unique_values = sorted(all_values)  # Ensure consistent ordering
         self.value_to_class = {v: i for i, v in enumerate(self.unique_values)}
-        self.num_classes     = len(self.unique_values)
+        self.num_classes = len(self.unique_values)
 
     def __len__(self):
-        return len(self.files)
+        return len(self.images)
 
-    def __getitem__(self, idx):
-        # ensure mapping exists
-        if self.lazy_class_mapping and self.unique_values is None:
+    def _lazy_class_mapping(self):
+        if self.unique_values is None:
             self._build_class_mapping()
 
-        fname = self.files[idx]
-        img_path  = os.path.join(self.image_dir, fname)
-        mask_path = os.path.join(self.mask_dir,  fname)
+    def __getitem__(self, idx):
+        try:
+            # Build the class mapping lazily if needed
+            if self.lazy_class_mapping:
+                self._lazy_class_mapping()
 
-        # load
-        image = Image.open(img_path).convert('RGB')
-        mask  = Image.open(mask_path).convert('L')
+            # Get paths
+            img_path = os.path.join(self.image_dir, self.images[idx])
+            mask_path = os.path.join(self.mask_dir, self.masks[idx])
 
-        # resize mask
-        mask = transforms.Resize(
-            (256, 256),
-            interpolation=transforms.InterpolationMode.NEAREST
-        )(mask)
+            # Load the image and mask
+            image = Image.open(img_path).convert('RGB')  # RGB image
+            mask = Image.open(mask_path).convert('L')    # Grayscale mask (class indices)
 
-        mask_np = np.array(mask, dtype=np.int64)
-        # remap raw pixel values → class indices
-        mask_mapped = np.vectorize(self.value_to_class.get)(mask_np)
-        mask_tensor = torch.tensor(mask_mapped, dtype=torch.long)
+            # Resize mask
+            mask = transforms.Resize((256, 256), interpolation=transforms.InterpolationMode.NEAREST)(mask)
+            mask_np = np.array(mask, dtype=np.int64)
 
-        # image transforms
-        if self.transform:
-            image = self.transform(image)
-        else:
-            image = transforms.ToTensor()(image)
+            # Remap mask values to class indices
+            mask_mapped = np.vectorize(self.value_to_class.get)(mask_np)
 
-        # mask transforms
-        if self.target_transform:
-            mask_tensor = self.target_transform(mask_tensor)
+            # Convert to one-hot encoding
+            mask_onehot = np.zeros((self.num_classes, mask_np.shape[0], mask_np.shape[1]), dtype=np.float32)
+            for class_idx in range(self.num_classes):
+                mask_onehot[class_idx][mask_mapped == class_idx] = 1.0
 
-        return image, mask_tensor
-    
+            # Convert mask to tensor
+            mask_tensor = torch.tensor(mask_mapped, dtype=torch.long)
+
+            # Apply transformations
+            if self.transform:
+                image = self.transform(image)
+            else:
+                image = transforms.ToTensor()(image)
+
+            if self.target_transform:
+                mask_tensor = self.target_transform(mask_tensor)
+
+            return image, mask_tensor
+        except Exception as e:
+            print(f"Error processing index {idx}: {e}")
+            raise e
+        
 class StructuralDamageModel(L.LightningModule):
     def __init__(self, arch, encoder_name, in_channels, out_classes):
         super().__init__()
@@ -222,24 +216,18 @@ class StructuralDamageModel(L.LightningModule):
         return self.shared_epoch_end("test")
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.0001)
-
-class PAEDLoss(torch.nn.Module):
-    def forward(self, preds, targets):
-        abs_diff = torch.abs(preds - targets)
-        paed = torch.mean(abs_diff / (targets + 1e-6))  
-        return paed
+        return torch.optim.Adam(self.parameters(), lr=0.00001)
 
 class ViTSegmentationModel(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, patch_size, hidden_size,num_hidden_layers,num_attention_heads):
         super().__init__()
         config = ViTConfig( #supuestos params de vit base patch16 224
         image_size=224,             # Tamaño de imagen esperado
-        patch_size=8,              # Tamaño de cada patch (16x16 px) -
+        patch_size=patch_size,              # Tamaño de cada patch (16x16 px) -
         num_channels=3,             # RGB
-        hidden_size=768,            # Dimensión del embedding por patch -
-        num_hidden_layers=12,       # Número de bloques Transformer -
-        num_attention_heads=12,     # Número de "cabezas" de atención -
+        hidden_size=hidden_size,            # Dimensión del embedding por patch -
+        num_hidden_layers=num_hidden_layers,       # Número de bloques Transformer -
+        num_attention_heads=num_attention_heads,     # Número de "cabezas" de atención -
         intermediate_size=3072,     # Dimensión del feedforward interno
         qkv_bias=True,              # Usar sesgo en QKV lineales (como ViT original)
         hidden_dropout_prob=0.1,    # Dropout entre bloques --
@@ -272,14 +260,12 @@ class ViTSegmentationModel(nn.Module):
         out = nn.functional.interpolate(out, size=x.shape[2:], mode='bilinear', align_corners=False)
 
         return out
-
-# Lightning Moduleclass 
+    
 class LightningViTModel(L.LightningModule):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, patch_size, hidden_size,num_hidden_layers,num_attention_heads):
         super().__init__()
-        self.model = ViTSegmentationModel(num_classes)
+        self.model = ViTSegmentationModel(num_classes, patch_size, hidden_size,num_hidden_layers,num_attention_heads)
         self.loss_fn = nn.CrossEntropyLoss()
-        self.paed_loss = PAEDLoss()
 
     def forward(self, x):
         return self.model(x)
@@ -292,36 +278,20 @@ class LightningViTModel(L.LightningModule):
         y = self._resize_target(y, size=(224, 224))
         logits = self.forward(x)
         loss = self.loss_fn(logits, y)
-        
-        probs = torch.softmax(logits, dim=1)
-        preds = torch.argmax(probs, dim=1)  # Predicciones finales
 
-        paed = self.paed_loss(preds.float(), y.float())
-        #paed = torch.tensor(0.123) #constante test 
-        self.log("train_paed", paed, prog_bar=True, on_epoch=True, logger=True)        
+        # Registrar el loss cada paso
         self.log("train_loss", loss, prog_bar=True, on_epoch=True, logger=True)
 
-        
         return loss
+
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
         y = self._resize_target(y, size=(224, 224))
         logits = self.forward(x)
         loss = self.loss_fn(logits, y)
-        probs = torch.softmax(logits, dim=1)
-        preds = torch.argmax(probs, dim=1)
-        paed = self.paed_loss(preds.float(), y.float())
-        #paed = torch.tensor(0.456) #constante test
-        self.log("val_paed", paed, prog_bar=True, on_epoch=True, logger=True)
+
         self.log("valid_loss", loss, prog_bar=True, on_epoch=True, logger=True)
 
-    def test_step(self, batch, batch_idx):
-        x, y = batch
-        y = self._resize_target(y, size=(224, 224))
-        logits = self.forward(x)
-        loss = self.loss_fn(logits, y)
-        self.log("test_loss", loss)
-
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=1e-4)
+        return torch.optim.Adam(self.parameters(), lr=1e-5)

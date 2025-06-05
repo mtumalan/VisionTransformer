@@ -97,5 +97,13 @@ ehthumbs.db
 VisionChallenge/
 logs/
 
+.env
+media/ 
+db.sqlite3
+*.png
+model/lightning_logs
+*.pyc
+*.ckpt
+*.txt
 *.pem
-# End of .gitignore
+

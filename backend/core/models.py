@@ -28,7 +28,6 @@ class VisionModel(models.Model):
     """
     name        = models.CharField(max_length=128, unique=True)
     description = models.TextField(blank=True)
-    weights     = models.FileField(upload_to="weights/")
     num_classes = models.PositiveSmallIntegerField(default=2)
     input_size  = models.PositiveSmallIntegerField(default=224)
     added_at    = models.DateTimeField(auto_now_add=True)

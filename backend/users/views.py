@@ -56,7 +56,7 @@ class CurrentUserView(APIView):
     """
     GET → return current user info if the sessionid cookie is valid.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request):
         user = request.user
@@ -67,7 +67,7 @@ class CurrentUserView(APIView):
         })
 
 class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def post(self, request):
         django_logout(request)            # destroys DB session + rotates key

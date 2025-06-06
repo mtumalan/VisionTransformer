@@ -51,7 +51,7 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = InferenceJobSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):

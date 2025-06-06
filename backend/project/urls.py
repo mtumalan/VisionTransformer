@@ -19,10 +19,13 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+from core.views import get_csrf_token
+
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('core.urls')),
+    path('api/', include('core.urls')),
     path('api/users/', include('users.urls')),
+    path('api/csrf/', get_csrf_token, name='get-csrf-token'),
 ]
 
 if settings.DEBUG:

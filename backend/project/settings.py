@@ -37,7 +37,16 @@ ALLOWED_HOSTS = [
 CORS_ALLOWED_ORIGINS = [
     "http://172.20.100.28:3000",
     "http://172.20.100.28:443",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
+
+CSRF_COOKIE_SECURE = False
+CORS_ALLOW_CREDENTIALS = True 
+APPEND_SLASH = False
+
+CSRF_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SAMESITE = "None"
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

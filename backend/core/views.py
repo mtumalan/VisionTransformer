@@ -1,10 +1,20 @@
 # backend/apps/core/views.py
 
+from django.http import HttpResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from .models import VisionModel, InferenceJob
 from .serializers import VisionModelSerializer, InferenceJobSerializer, HelloWorldSerializer
+
+@ensure_csrf_cookie
+def get_csrf_token(request):
+    """
+    A GET to this URL forces Django to set a 'csrftoken' cookie.
+    We don’t need to return JSON or HTML—just an HTTP 200 with the decorator.
+    """
+    return HttpResponse("CSRF cookie set")
 
 class VisionModelViewSet(viewsets.ReadOnlyModelViewSet):
     """

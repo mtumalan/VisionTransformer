@@ -9,15 +9,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - vt_shared_network
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    networks:
-      - vt_shared_network
 
   backend:
     build:
@@ -33,15 +29,7 @@ services:
       - ./.env
     depends_on:
       - db
-      - redis
-    networks:
-      vt_shared_network:
-        aliases:
-          - django_backend_vt      # frontend will use this name to reach the API
+      - redis   # frontend will use this name to reach the API
 
 volumes:
   postgres_data:
-
-networks:
-  vt_shared_network:
-    external: true

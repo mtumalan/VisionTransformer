@@ -12,15 +12,17 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('username', 'password', 'email', 'first_name', 'last_name')
+        fields = ('username', 'password', 'email', 'first_name', 'last_name', 'password')
 
+    extra_kwargs = {
+        'email': {'required': False},
+        'first_name': {'required': False},
+        'last_name': {'required': False},
+    }
+    
     def create(self, validated_data):
-        # Use create_user so that the password is hashed
-        user = User.objects.create_user(
-            username=validated_data['username'],
-            password=validated_data['password'],
-            email=validated_data.get('email', ''),
-        )
+        validated_data.pop('confirm_password', None)
+        user = User.objects.create_user(**validated_data)
         return user
 
 class LoginSerializer(serializers.Serializer):

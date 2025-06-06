@@ -14,26 +14,45 @@ class VisionModelSerializer(serializers.ModelSerializer):
         model = VisionModel
         fields = ["id", "name", "description", "num_classes", "input_size", "added_at"]
 
-
+class MetricSerializer(serializers.Serializer):
+    total_photos_analyzed   = serializers.IntegerField()
+    total_failures_detected = serializers.IntegerField()
+    total_users             = serializers.IntegerField()
+    
 class InferenceJobSerializer(serializers.ModelSerializer):
     """
-    For listing/creating a job. 
-    - On create, the user submits: { vision_model: <id>, input_image: <file> }.
-    - Read-only fields: status, mask_image, created_at, updated_at, error_message.
+    For listing/creating a job:
+      - Client POSTs: { vision_model: <id>, input_image: <file> }
+      - Read‐only on GET: status, mask_image, created_at, updated_at, error_message, vision_model_details, user_username.
     """
 
-    # We may want to return a nested VisionModel representation
+    # 1) Nested details of the chosen VisionModel (read only)
     vision_model_details = VisionModelSerializer(source="vision_model", read_only=True)
-    
+
+    # 2) Expose the uploader's username (read only)
+    user_username = serializers.CharField(source="user.username", read_only=True)
+
     class Meta:
         model = InferenceJob
+
+        # Fields that should not be written by client (read only)
         read_only_fields = [
-            "id", "user", "status", "mask_image", "created_at", "updated_at", "error_message",
-            "vision_model_details",
-        ]
-        fields = [
             "id",
             "user",
+            "status",
+            "mask_image",
+            "created_at",
+            "updated_at",
+            "error_message",
+            "vision_model_details",
+            "user_username",
+        ]
+
+        # Fields that the API returns / consumes
+        fields = [
+            "id",
+            "user",              # numeric FK (still available if needed)
+            "user_username",     # <— newly added read‐only field
             "vision_model",
             "vision_model_details",
             "input_image",
@@ -46,11 +65,10 @@ class InferenceJobSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         """
-        Override create() to set `user` from request context.
+        Override create() to set `user` from the request, then create the InferenceJob.
         """
         request = self.context.get("request")
         user = request.user
-        # vision_model and input_image are already in validated_data
         job = InferenceJob.objects.create(user=user, **validated_data)
         return job
 

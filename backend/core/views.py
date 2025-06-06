@@ -78,7 +78,11 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
         1) Save the new InferenceJob (serializer.save() sets vision_model via PK, and user via the serializer).
         2) Push the job off to the external server in a separate thread so the client does not wait.
         """
-        job = serializer.save(user=self._default_user()) # This uses InferenceJobSerializer.create()
+        validated = {**serializer.validated_data}
+        validated.pop("user", None)
+        job = InferenceJob.objects.create(       # bypass save()
+        user=self._default_user(), **validated
+    )
 
         # Grab the chosen model’s ID
         model_id = job.vision_model.id

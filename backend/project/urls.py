@@ -21,13 +21,16 @@ from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 
+from core.views import get_csrf_token
+
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('core.urls')),
+    path('api/', include('core.urls')),
     path('api/users/', include('users.urls')),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(), name='swagger-ui'),
     path('api/schema/redoc/', SpectacularRedocView.as_view(), name='redoc'),
+    path('api/csrf/', get_csrf_token, name='get-csrf-token'),
 ]
 
 if settings.DEBUG:

@@ -101,6 +101,7 @@ configurations = [
     {'ID': 3, 'patch_size': 8, 'hidden_size': 512, 'hidden_layers': 8, 'attention_heads': 8},
     {'ID': 4, 'patch_size': 8, 'hidden_size': 768, 'hidden_layers': 12, 'attention_heads': 12},
     {'ID': 5, 'patch_size': 8, 'hidden_size': 1024, 'hidden_layers': 16, 'attention_heads': 16},
+    
     {'ID': 6, 'patch_size': 4, 'hidden_size': 512, 'hidden_layers': 8, 'attention_heads': 8},
     {'ID': 7, 'patch_size': 4, 'hidden_size': 768, 'hidden_layers': 12, 'attention_heads': 12},
     {'ID': 8, 'patch_size': 4, 'hidden_size': 1024, 'hidden_layers': 16, 'attention_heads': 16},

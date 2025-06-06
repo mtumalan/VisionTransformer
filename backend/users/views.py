@@ -1,45 +1,75 @@
-# backend/users/views.py
+from django.contrib.auth import authenticate, login as django_login
 from rest_framework import status
-from rest_framework.response import Response
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
-from django.contrib.auth import login
-
-from .serializers import RegisterSerializer, LoginSerializer
-
-class RegisterView(APIView):
-    """
-    POST /api/register/  →  create a new user.
-    """
-
-    permission_classes = []  # Allow any user (authenticated or not) to hit this endpoint
-
-    def post(self, request, *args, **kwargs):
-        serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            data = {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-            }
-            return Response(data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+from rest_framework.response import Response
+from .serializers import LoginSerializer, RegisterSerializer
 
 class LoginView(APIView):
     """
-    POST /api/login/  →  authenticate and log in a user.
+    POST { username, password } → authenticate + create a session (sessionid cookie).
     """
-    permission_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        # 1) Validate credentials via the serializer
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data["user"]
+
+        # 2) Call Django's login() to set request.session and issue sessionid cookie
+        django_login(request, user)
+
+        # 3) Return some basic user info (or whatever you like)
+        return Response(
+            {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+class RegisterView(APIView):
+    """
+    POST { username, password, email, … } → create a new user.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(
+            {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+class CurrentUserView(APIView):
+    """
+    GET → return current user info if the sessionid cookie is valid.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+        })
+
+class LogoutView(APIView):
+    """
+    POST → log out the user by clearing the session.
+    """
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        serializer = LoginSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.validated_data['user']
-            login(request, user)
-            data = {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-            }
-            return Response(data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Clear the session to log out
+        request.session.flush()
+        return Response(status=status.HTTP_204_NO_CONTENT)

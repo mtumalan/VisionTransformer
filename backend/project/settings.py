@@ -52,6 +52,8 @@ REST_FRAMEWORK = {
         )
     }
 
+SITE_ID = 1
+
 CSRF_COOKIE_SECURE = False
 CORS_ALLOW_CREDENTIALS = True 
 APPEND_SLASH = False

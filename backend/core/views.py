@@ -5,7 +5,9 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from .models import VisionModel, InferenceJob
 from .serializers import VisionModelSerializer, InferenceJobSerializer, HelloWorldSerializer
+import requests
 
+SERVER_MODELOS_URL = "http://172.20.100.2:8000/api/process/"  
 class VisionModelViewSet(viewsets.ReadOnlyModelViewSet):
     """
     GET /api/v1/vision-models/          → list all models
@@ -14,7 +16,6 @@ class VisionModelViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = VisionModel.objects.all().order_by("name")
     serializer_class = VisionModelSerializer
     permission_classes = [permissions.AllowAny]
-
 
 class InferenceJobViewSet(viewsets.ModelViewSet):
     """
@@ -33,8 +34,24 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
         return InferenceJob.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        # The serializer.create() method already pulls in `user=request.user`
-        serializer.save()
+        job = serializer.save()
+        # Obtén el model_index tal cual del request (si lo necesitas aquí)
+        model_index = int(self.request.data.get("model_index"))
+        self.call_model_server(job, model_index)
+
+    def call_model_server(self, job, model_index):
+        try:
+            with job.input_image.open("rb") as img_file:
+                files = {'input_image': img_file}
+                data = {
+                    'job_id': str(job.id),
+                    'model_index': model_index
+                }
+                response = requests.post(SERVER_MODELOS_URL, files=files, data=data, timeout=60)
+                if response.status_code != 200:
+                    print("Error llamando al server de modelos:", response.text)
+        except Exception as e:
+            print("Error llamando al server de modelos:", e)
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def complete(self, request, pk=None):

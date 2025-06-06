@@ -11,6 +11,11 @@ import threading
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from django.contrib.auth.models import User
+from django.conf import settings
+import logging
+logger = logging.getLogger(__name__)
+
+
 
 @ensure_csrf_cookie
 def get_csrf_token(request):
@@ -75,32 +80,23 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
         ).start()
 
     def call_model_server(self, job, model_identifier):
-        """
-        POST to an external server:
-          - job_id       (string)
-          - model_id     (integer)
-          - input_image  (file)
-        """
         try:
             with job.input_image.open("rb") as img_file:
                 files = {"input_image": img_file}
-                data = {
+                data  = {
                     "job_id": str(job.id),
-                    "model_id": model_identifier,
+                    "vision_model_id": model_identifier,
                 }
-                response = requests.post(
-                    SERVER_MODELOS_URL, files=files, data=data, timeout=60
-                )
-                if response.status_code != 200:
-                    # Log any non-200 responses
-                    print(
-                        "Error calling model server:",
-                        response.status_code,
-                        response.text,
-                    )
-        except Exception as e:
-            print("Error calling model server:", e)
+                headers = {"X-ORCH-TOKEN": settings.ORCH_SHARED_TOKEN}
 
+                resp = requests.post(settings.ORCH_URL,
+                                    data=data, files=files,
+                                    headers=headers, timeout=60)
+                if resp.status_code != 202:
+                    logger.warning("Orchestrator error %s – %s",
+                                resp.status_code, resp.text)
+        except Exception:
+            logger.exception("Could not reach orchestrator")
 
 class HelloWorldViewSet(viewsets.ViewSet):
     """

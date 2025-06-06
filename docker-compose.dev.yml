@@ -30,6 +30,7 @@ services:
     depends_on:
       - db
       - redis   # frontend will use this name to reach the API
-
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # for local development
 volumes:
   postgres_data:

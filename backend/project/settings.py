@@ -182,3 +182,6 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+ORCH_URL = os.environ.get("ORCH_URL", "http://127.0.0.1:8001/enqueue/")
+ORCH_SHARED_TOKEN = os.environ.get("ORCH_SHARED_TOKEN", "your_shared_secret_token")

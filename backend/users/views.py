@@ -4,6 +4,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .serializers import LoginSerializer, RegisterSerializer
+from django.conf import settings
+from django.contrib.auth import logout as django_logout
+
 
 class LoginView(APIView):
     """
@@ -64,12 +67,14 @@ class CurrentUserView(APIView):
         })
 
 class LogoutView(APIView):
-    """
-    POST → log out the user by clearing the session.
-    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # Clear the session to log out
-        request.session.flush()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        django_logout(request)            # destroys DB session + rotates key
+        resp = Response(status=status.HTTP_204_NO_CONTENT)
+        resp.delete_cookie(
+            settings.SESSION_COOKIE_NAME,
+            path="/",
+            samesite=settings.SESSION_COOKIE_SAMESITE,
+        )
+        return resp

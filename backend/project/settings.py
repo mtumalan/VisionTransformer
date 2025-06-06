@@ -38,14 +38,21 @@ ALLOWED_HOSTS = [
 CORS_ALLOWED_ORIGINS = [
     "http://172.20.100.28:3000",
     "http://172.20.100.28:443",
+	"https://172.20.100.28:3000",
+    "https://172.20.100.28:443",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+	"https://localhost:3000",
+    "https://127.0.0.1:3000",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    "http://127.0.0.1:3000",   # React dev server
-    "http://localhost:3000",   # if you sometimes use localhost
-    # add your LAN host / HTTPS site later
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+	"https://127.0.0.1:3000",
+    "https://localhost:3000",
+    "https://172.20.100.28:3000",
+    "https://172.20.100.28:443",
 ]
 
 
@@ -54,9 +61,9 @@ REST_FRAMEWORK = {
             'rest_framework.permissions.IsAuthenticated',
         ],
         'DEFAULT_AUTHENTICATION_CLASSES': (
-            #'rest_framework.authentication.BasicAuthentication',  # enables simple command line authentication
+            'rest_framework.authentication.BasicAuthentication',  # enables simple command line authentication
             'rest_framework.authentication.SessionAuthentication',
-            #'rest_framework.authentication.TokenAuthentication',
+            'rest_framework.authentication.TokenAuthentication',
         ),
         "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
         "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
@@ -65,12 +72,16 @@ REST_FRAMEWORK = {
 
 SITE_ID = 1
 
-CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = True
 CORS_ALLOW_CREDENTIALS = True 
 APPEND_SLASH = False
 
 CSRF_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_SAMESITE = "Lax"
+
+SESSION_COOKIE_SECURE = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = True
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -87,6 +98,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
+	'django_extensions',
     'drf_spectacular',
     'rest_framework',
     'corsheaders',

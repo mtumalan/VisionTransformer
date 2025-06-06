@@ -54,6 +54,13 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.AllowAny]
     parser_classes = [MultiPartParser, FormParser]
 
+    def _default_user(self):
+        """
+        Return the earliest User (id=1, or whichever is first).
+        Assumes at least one user exists.
+        """
+        return get_user_model().objects.order_by("id").first()
+    
     def get_queryset(self):
         # Each user sees only their own jobs
         qs = InferenceJob.objects.filter(user=self.request.user)
@@ -70,7 +77,7 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
         1) Save the new InferenceJob (serializer.save() sets vision_model via PK, and user via the serializer).
         2) Push the job off to the external server in a separate thread so the client does not wait.
         """
-        job = serializer.save()  # This uses InferenceJobSerializer.create()
+        job = serializer.save(user=self._default_user()) # This uses InferenceJobSerializer.create()
 
         # Grab the chosen model’s ID
         model_id = job.vision_model.id

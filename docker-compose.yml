@@ -45,6 +45,14 @@ services:
     depends_on:
       - db
       - redis
+  
+  nginx:
+    build: ./nginx          # uses the Dockerfile above
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:

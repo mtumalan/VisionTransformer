@@ -2,6 +2,7 @@
 
 from django.http import HttpResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
+from rest_framework.decorators import action
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from .models import VisionModel, InferenceJob
@@ -13,6 +14,7 @@ from rest_framework.permissions import AllowAny
 from django.contrib.auth.models import User
 from django.conf import settings
 import logging
+from rest_framework.parsers import MultiPartParser, FormParser
 logger = logging.getLogger(__name__)
 
 
@@ -50,6 +52,7 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
 
     serializer_class = InferenceJobSerializer
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
         # Each user sees only their own jobs
@@ -97,6 +100,41 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
                                 resp.status_code, resp.text)
         except Exception:
             logger.exception("Could not reach orchestrator")
+
+    @action(
+        detail=True, methods=["post"], url_path="complete",
+        permission_classes=[permissions.AllowAny]  # O ponlo como IsAdminUser si quieres restringir
+    )
+    def complete(self, request, pk=None):
+        """
+        POST /api/inference-jobs/<id>/complete/
+        Body: mask_image (archivo)
+        Cambia el status a DONE y guarda la mask_image.
+        """
+        job = self.get_object()
+
+        # Si el job ya fue completado, no dejar sobreescribir
+        if job.status == "DONE":
+            return Response(
+                {"error": "Job ya completado."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        mask_file = request.FILES.get("mask_image")
+        if not mask_file:
+            return Response(
+                {"error": "mask_image es requerido."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        job.mask_image = mask_file
+        job.status = "DONE"
+        job.save(update_fields=["mask_image", "status", "updated_at"])
+
+        return Response(
+            InferenceJobSerializer(job, context={"request": request}).data,
+            status=status.HTTP_200_OK
+        )
 
 class HelloWorldViewSet(viewsets.ViewSet):
     """

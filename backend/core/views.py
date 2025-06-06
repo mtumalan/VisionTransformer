@@ -16,6 +16,7 @@ from django.conf import settings
 import logging
 from rest_framework.parsers import MultiPartParser, FormParser
 logger = logging.getLogger(__name__)
+from django.contrib.auth import get_user_model
 
 
 

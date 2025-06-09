@@ -26,7 +26,7 @@ DJANGO_DEBUG=True
 
 ### Quick Start (Docker)
 ```bash
-docker-compose up --build
+ docker-compose -f .\docker-compose.dev.yml up -d --build
 ```
 - Backend: http://localhost:8000/
 

@@ -8,6 +8,17 @@ Backend service for our Vision Transformer (ViT) platform developed in Django an
 - User management
 - Dockerized for easy development and deployment
 
+## Environment Variables
+To run the backend, create a `.env` file in the project root with the following content:
+
+```env
+POSTGRES_DB=postgres
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+DJANGO_SECRET_KEY=your‐django‐secret‐key
+DJANGO_DEBUG=True
+```
+
 ## Setup
 ### Prerequisites
 - Docker & Docker Compose

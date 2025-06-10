@@ -29,15 +29,14 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
 
 
 ALLOWED_HOSTS = [
-    "172.20.100.67", 
-    "172.20.100.171",   
-    "localhost",        
-    "127.0.0.1",        
+    "45.79.253.86",  # your server IP     
+    "localhost",
+    "127.0.0.1",
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://172.20.100.28:3000",
-    "http://172.20.100.28:443",
+    "http://45.79.253.86:3000",
+    "http://45.79.253.86:443",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
@@ -45,7 +44,8 @@ CORS_ALLOWED_ORIGINS = [
 CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:3000",   # React dev server
     "http://localhost:3000",   # if you sometimes use localhost
-    # add your LAN host / HTTPS site later
+    "http://45.79.253.86:3000",
+    "http://45.79.253.86:443",
 ]
 
 

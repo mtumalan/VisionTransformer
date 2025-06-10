@@ -39,25 +39,6 @@ This repository demonstrates the backend solution for detecting structural damag
 
 ---
 
-## Architecture
-
-```
-┌────────────┐    ┌───────────────┐    ┌───────────────┐
-│  Nginx     │ ◀─ │ Django        │ ◀─ │ PostgreSQL    │
-│  (Proxy)   │    │               │    │ & Redis       │
-└────────────┘    └───────────────┘    └───────────────┘
-        │                 ▲                    ▲
-        │                 │                    │
-        ▼                 │                    │
-   Client              Message Broker      Persistent Storage
-```
-
-1. **Client** uploads an image / triggers training/inference.  
-2. **Nginx** routes requests to Django backend.  
-3. **Django** enqueues jobs in Redis, reads/writes to PostgreSQL.  
-
----
-
 ## Prerequisites
 
 - [Docker](https://www.docker.com/) >= 20.10  
@@ -98,7 +79,6 @@ docker-compose -f docker-compose.dev.yml up --build
 ```
 
 - **Backend** at `http://localhost:8000/`  
-- **Nginx/Proxy** (if enabled) at `http://localhost/`  
 
 ### Production
 
@@ -137,14 +117,7 @@ All service configuration values are managed via environment variables defined i
 
 ## API Endpoints
 
-| Method | Path                   | Description                       |
-| ------ | ---------------------- | --------------------------------- |
-| POST   | `/api/inference-jobs/` | Submit a new inference job        |
-| GET    | `/api/jobs/<job_id>/`  | Retrieve job status & result      |
-| POST   | `/api/users/register/` | Register a new user               |
-| POST   | `/api/users/login/`    | Obtain session cookie / token     |
-
-_(See `backend/core/urls.py` and `backend/users/urls.py` for full list.)_
+See `localhost:8000/api/schema/swagger-ui/` for full list.
 
 ---
 
@@ -172,31 +145,6 @@ All training scripts assume Python 3.10 and the dependencies in `requirements.tx
    python model/CE/testViTModel.py
    python model/PAED/ViTscriptTest.py
    ```
-
----
-
-## Directory Structure
-
-```text
-.
-├── backend/                   # Django project & apps
-│   ├── core/                  # Inference jobs, models, views
-│   ├── users/                 # Auth & user management
-│   ├── project/               # Settings, URLs, Celery config
-│   └── Dockerfile
-├── model/                     # ViT training & test scripts
-│   ├── CE/                    # “CE” variant
-│   └── PAED/                  # “PAED” variant
-├── nginx/                     # Nginx Dockerfile & config
-├── docker-compose.yml         # Production compose file
-├── docker-compose.dev.yml     # Development compose file
-├── requirements.txt           # Python dependencies
-├── documentation.pdf          # Detailed design & usage
-└── presentation.pdf           # Project overview slides
-```
-
----
-
 ## Documentation
 
 - **Documentation:** [`documentation.pdf`](documentation.pdf)  

@@ -63,8 +63,6 @@ class InferenceJobSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
-        read_only_fields = ("user",)
-
     def create(self, validated_data):
         """
         Override create() to set `user` from the request, then create the InferenceJob.

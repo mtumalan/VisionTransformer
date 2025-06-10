@@ -107,6 +107,15 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'project.urls'
 
+VIT_CHECKPOINT = os.environ.get(
+    "VIT_CHECKPOINT",
+    "/opt/weights/epoch=99-step=81092.ckpt",      # copy / mount the file here
+)
+CLASSDICT_CSV = os.environ.get(
+    "CLASSDICT_CSV",
+    "/opt/weights/calss_names_colors.csv",
+)
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',

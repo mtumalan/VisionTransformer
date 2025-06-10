@@ -15,6 +15,9 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # ─── 2) Copy & install Python dependencies ───
+COPY docker/weights/epoch=99-step=81092.ckpt /opt/weights/epoch=99-step=81092.ckpt
+COPY docker/weights/calss_names_colors.csv  /opt/weights/calss_names_colors.csv
+
 COPY requirements.txt /app/
 RUN pip install --upgrade pip \
  && pip install -r requirements.txt

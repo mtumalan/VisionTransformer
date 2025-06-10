@@ -2,7 +2,6 @@
 
 from django.http import HttpResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
-from rest_framework.decorators import action
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from .models import VisionModel, InferenceJob
@@ -15,8 +14,8 @@ from django.contrib.auth.models import User
 from django.conf import settings
 import logging
 from rest_framework.parsers import MultiPartParser, FormParser
+from .utils import process_job_local  # local inference processing function
 logger = logging.getLogger(__name__)
-from django.contrib.auth import get_user_model
 
 
 
@@ -52,16 +51,9 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = InferenceJobSerializer
-    permission_classes = [permissions.AllowAny]
-    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes    = [MultiPartParser, FormParser]
 
-    def _default_user(self):
-        """
-        Return the earliest User (id=1, or whichever is first).
-        Assumes at least one user exists.
-        """
-        return get_user_model().objects.order_by("id").first()
-    
     def get_queryset(self):
         # Each user sees only their own jobs
         qs = InferenceJob.objects.filter(user=self.request.user)
@@ -75,22 +67,21 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """
-        1) Save the new InferenceJob (serializer.save() sets vision_model via PK, and user via the serializer).
-        2) Push the job off to the external server in a separate thread so the client does not wait.
+        1) Create the DB row immediately.
+        2) Spawn a daemon thread that runs the heavy model inference *locally*.
         """
         validated = {**serializer.validated_data}
         validated.pop("user", None)
-        job = InferenceJob.objects.create(       # bypass save()
-        user=self._default_user(), **validated
-    )
 
-        # Grab the chosen model’s ID
-        model_id = job.vision_model.id
+        job = serializer.save()  
 
-        # Spawn a daemon thread to call the external model server
+        with job.input_image.open("rb") as fh:
+            img_bytes = fh.read()
+
+        # spin up the worker thread – no Celery, no second backend
         threading.Thread(
-            target=self.call_model_server,
-            args=(job, model_id),
+            target=process_job_local,
+            args=(job.id, img_bytes),     # ← only two positional args now
             daemon=True,
         ).start()
 
@@ -112,41 +103,6 @@ class InferenceJobViewSet(viewsets.ModelViewSet):
                                 resp.status_code, resp.text)
         except Exception:
             logger.exception("Could not reach orchestrator")
-
-    @action(
-        detail=True, methods=["post"], url_path="complete",
-        permission_classes=[permissions.AllowAny]  # O ponlo como IsAdminUser si quieres restringir
-    )
-    def complete(self, request, pk=None):
-        """
-        POST /api/inference-jobs/<id>/complete/
-        Body: mask_image (archivo)
-        Cambia el status a DONE y guarda la mask_image.
-        """
-        job = self.get_object()
-
-        # Si el job ya fue completado, no dejar sobreescribir
-        if job.status == "DONE":
-            return Response(
-                {"error": "Job ya completado."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        mask_file = request.FILES.get("mask_image")
-        if not mask_file:
-            return Response(
-                {"error": "mask_image es requerido."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        job.mask_image = mask_file
-        job.status = "DONE"
-        job.save(update_fields=["mask_image", "status", "updated_at"])
-
-        return Response(
-            InferenceJobSerializer(job, context={"request": request}).data,
-            status=status.HTTP_200_OK
-        )
 
 class HelloWorldViewSet(viewsets.ViewSet):
     """

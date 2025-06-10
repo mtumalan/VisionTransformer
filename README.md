@@ -1,47 +1,203 @@
-# Cracks Backend
+# VisionTransformer Platform
 
-Backend service for our Vision Transformer (ViT) platform developed in Django and Dockerized environment. 
+An end-to-end semantic segmentation pipeline powered by Vision Transformer (ViT) models, featuring a Django REST API backend, Celery task queue, PostgreSQL & Redis, Dockerized deployment and Nginx reverse proxy.
+
+---
+
+## Overview
+
+This repository demonstrates the backend solution for detecting structural damage in images using Vision Transformer models. Users can:
+
+1. Submit images via a REST API.  
+2. Enqueue inference jobs to Celery workers.  
+3. Retrieve segmentation masks or classification results.  
+4. Train and evaluate ViT-based models locally.
+
+---
 
 ## Features
-- Structure damage inference using Vision Transformer models
-- Django REST API backend
-- User management
-- Dockerized for easy development and deployment
 
-## Environment Variables
-To run the backend, create a `.env` file in the project root with the following content:
+- **Vision Transformer (ViT)** for high-accuracy segmentation  
+- **Django REST Framework** backend  
+- **Celery + Redis** for asynchronous job processing  
+- **PostgreSQL** for persistent storage  
+- **Docker & Docker Compose** for reproducible environments  
+- **Nginx** as reverse proxy and SSL terminator  
+- User authentication & management  
+- Ready-to-use training scripts (CE & PAED variants)  
 
-```env
-POSTGRES_DB=postgres
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-DJANGO_SECRET_KEY=your‐django‐secret‐key
-DJANGO_DEBUG=True
+---
+
+## Tech Stack
+
+- **Language & Frameworks:** Python 3.10, Django 5.2, Django REST Framework  
+- **ML Libraries:** PyTorch, timm  
+- **Task Queue:** Celery, Redis  
+- **Database:** PostgreSQL 15  
+- **Proxy:** Nginx 1.25-alpine  
+- **Containerization:** Docker, Docker Compose 3.9  
+
+---
+
+## Architecture
+
+```
+┌────────────┐    ┌───────────────┐    ┌───────────────┐
+│  Nginx     │ ◀─ │ Django        │ ◀─ │ PostgreSQL    │
+│  (Proxy)   │    │               │    │ & Redis       │
+└────────────┘    └───────────────┘    └───────────────┘
+        │                 ▲                    ▲
+        │                 │                    │
+        ▼                 │                    │
+   Client              Message Broker      Persistent Storage
 ```
 
-## Setup
-### Prerequisites
-- Docker & Docker Compose
-- Python 3.10+ (for local development)
+1. **Client** uploads an image / triggers training/inference.  
+2. **Nginx** routes requests to Django backend.  
+3. **Django** enqueues jobs in Redis, reads/writes to PostgreSQL.  
 
-### Quick Start (Docker)
+---
+
+## Prerequisites
+
+- [Docker](https://www.docker.com/) >= 20.10  
+- [Docker Compose](https://docs.docker.com/compose/) >= 1.29  
+- Python 3.10 (for local model training)  
+- `git`  
+
+---
+
+## Installation
+
+### Environment Setup
+
+1. Clone the repo:
+   ```bash
+   git clone https://github.com/your-org/VisionTransformer.git
+   cd VisionTransformer
+   ```
+
+2. Copy `.env.example` to `.env` and fill in values:
+   ```bash
+   cp .env.example .env
+   ```
+   ```dotenv
+   POSTGRES_DB=postgres
+   POSTGRES_USER=postgres
+   POSTGRES_PASSWORD=postgres
+   DJANGO_SECRET_KEY=your_secret_key_here
+   DJANGO_DEBUG=True
+   ORCH_URL=http://localhost:8001/enqueue/
+   ORCH_SHARED_TOKEN=your_shared_token
+   ```
+
+### Development
+
 ```bash
- docker-compose -f .\docker-compose.dev.yml up -d --build
+docker-compose -f docker-compose.dev.yml up --build
 ```
-- Backend: http://localhost:8000/
 
-### Local Development
-1. Install Python dependencies:
+- **Backend** at `http://localhost:8000/`  
+- **Nginx/Proxy** (if enabled) at `http://localhost/`  
+
+### Production
+
+```bash
+docker-compose up --build -d
+```
+
+- Exposes ports **80** and **443** via Nginx.  
+
+---
+
+## Configuration
+
+All service configuration values are managed via environment variables defined in `.env`. Key variables:
+
+- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` – PostgreSQL credentials  
+- `DJANGO_SECRET_KEY` – Django secret key  
+- `DJANGO_DEBUG` – `True` or `False`  
+- `ORCH_URL` – URL for Celery enqueue endpoint  
+- `ORCH_SHARED_TOKEN` – Shared token for API authentication  
+
+---
+
+## Usage
+
+- **Run migrations** (inside backend container):
+  ```bash
+  docker-compose exec backend python manage.py migrate
+  ```
+- **Create superuser**:
+  ```bash
+  docker-compose exec backend python manage.py createsuperuser
+  ```
+
+---
+
+## API Endpoints
+
+| Method | Path                   | Description                       |
+| ------ | ---------------------- | --------------------------------- |
+| POST   | `/api/inference-jobs/` | Submit a new inference job        |
+| GET    | `/api/jobs/<job_id>/`  | Retrieve job status & result      |
+| POST   | `/api/users/register/` | Register a new user               |
+| POST   | `/api/users/login/`    | Obtain session cookie / token     |
+
+_(See `backend/core/urls.py` and `backend/users/urls.py` for full list.)_
+
+---
+
+## Model Training
+
+All training scripts assume Python 3.10 and the dependencies in `requirements.txt`.
+
+1. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
-2. Run Django backend:
+
+2. **Train CE model**:
    ```bash
-   cd backend
-   python manage.py migrate
-   python manage.py runserver
+   python model/CE/trainCurrentViTmodel.py
    ```
 
-## Usage
-- API endpoints: see Django backend (`backend/core/urls.py`)
-- Upload images and run inference via API or Django admin
+3. **Train PAED model**:
+   ```bash
+   python model/PAED/ViTscript.py
+   ```
+
+4. **Run tests**:
+   ```bash
+   python model/CE/testViTModel.py
+   python model/PAED/ViTscriptTest.py
+   ```
+
+---
+
+## Directory Structure
+
+```text
+.
+├── backend/                   # Django project & apps
+│   ├── core/                  # Inference jobs, models, views
+│   ├── users/                 # Auth & user management
+│   ├── project/               # Settings, URLs, Celery config
+│   └── Dockerfile
+├── model/                     # ViT training & test scripts
+│   ├── CE/                    # “CE” variant
+│   └── PAED/                  # “PAED” variant
+├── nginx/                     # Nginx Dockerfile & config
+├── docker-compose.yml         # Production compose file
+├── docker-compose.dev.yml     # Development compose file
+├── requirements.txt           # Python dependencies
+├── documentation.pdf          # Detailed design & usage
+└── presentation.pdf           # Project overview slides
+```
+
+---
+
+## Documentation
+
+- **Documentation:** [`documentation.pdf`](documentation.pdf)  
+- **Slides:** [`presentation.pdf`](presentation.pdf)  
